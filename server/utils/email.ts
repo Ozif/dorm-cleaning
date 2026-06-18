@@ -41,19 +41,26 @@ export class EmailService {
     subject: string,
     html: string,
   ): Promise<boolean> {
-    try {
-      const transporter = this.getTransporter()
-      await transporter.sendMail({
-        from: `"${this.fromName}" <${this.fromAddr}>`,
-        to,
-        subject,
-        html,
-      })
-      return true
-    } catch (err) {
-      console.error('[EmailService] 发送邮件失败:', err)
-      return false
+    const maxAttempts = 3
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const transporter = this.getTransporter()
+        await transporter.sendMail({
+          from: `"${this.fromName}" <${this.fromAddr}>`,
+          to,
+          subject,
+          html,
+        })
+        return true
+      } catch (err) {
+        console.error(`[EmailService] 发送邮件失败 (${attempt}/${maxAttempts}):`, err)
+        if (attempt < maxAttempts) {
+          const delay = Math.pow(2, attempt) * 1000
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      }
     }
+    return false
   }
 
   /**

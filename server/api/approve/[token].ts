@@ -50,13 +50,20 @@ export default defineEventHandler(async (event) => {
   const dormId = Number(dormResult[0].insertId)
 
   // 创建首位成员（管理员），邮箱自动验证
-  await db.insert(members).values({
+  const memberResult = await db.insert(members).values({
     dormId,
     name: req.applicantName,
     email: req.applicantEmail,
     weight: '1.0',
     emailVerified: true,
   })
+
+  const memberId = Number(memberResult[0].insertId)
+
+  // 更新宿舍配置的管理员成员 ID
+  await db.update(dormConfig)
+    .set({ adminMemberId: memberId })
+    .where(eq(dormConfig.id, dormId))
 
   await connection.end()
 

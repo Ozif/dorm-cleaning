@@ -41,34 +41,4 @@ export default defineEventHandler(async (event) => {
   }
 })
 
-/**
- * PUT /api/dorm/config
- * 更新宿舍配置
- */
-export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event)
-  const dormId = user.dormId
-  const body = await readBody(event)
-  const { frequencyType, frequencyCount } = body
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
-  const { dormConfig } = await import('~/server/models/schema')
-
-  await db.update(dormConfig)
-    .set({
-      frequencyType,
-      frequencyCount,
-      updatedAt: new Date(),
-    })
-    .where(eq(dormConfig.id, dormId))
-
-  await connection.end()
-  return { success: true, message: '配置已更新' }
-})

@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/mysql2'
 import mysql from 'mysql2/promise'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '~/server/utils/auth'
 import { schedulerService } from '~/server/services/scheduler'
 
@@ -63,7 +63,7 @@ export default defineEventHandler(async (event) => {
     // 检查是否已存在该日期的排班
     const existing = await db.select()
       .from(schedules)
-      .where(eq(schedules.scheduledDate, a.scheduledDate))
+      .where(and(eq(schedules.dormId, dormId), eq(schedules.scheduledDate, a.scheduledDate)))
       .limit(1)
 
     if (existing.length === 0) {
