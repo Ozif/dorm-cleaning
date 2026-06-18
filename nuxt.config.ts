@@ -7,6 +7,7 @@ export default defineNuxtConfig({
     port: parseInt(process.env.NUXT_PORT || '3000'),
   },
   nitro: {
+    plugins: ['~/server/plugins/cron.ts'],
     scheduledTasks: {},
   },
 })

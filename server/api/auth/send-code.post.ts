@@ -96,11 +96,7 @@ export default defineEventHandler(async (event) => {
 
   // 发送验证码邮件
   const { emailService } = await import('~/server/utils/email')
-  await emailService.sendNotification(
-    email,
-    '宿舍管理系统 - 登录验证码',
-    `您的登录验证码是：${code}\n\n验证码有效期为10分钟，请勿泄露给他人。`
-  )
+  await emailService.sendVerifyCode(email, code)
 
   await connection.end()
   return { success: true, message: '验证码已发送' }
