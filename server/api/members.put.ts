@@ -1,0 +1,41 @@
+import { drizzle } from 'drizzle-orm/mysql2'
+import mysql from 'mysql2/promise'
+import { eq } from 'drizzle-orm'
+import { requireAuth } from '~/server/utils/auth'
+
+/**
+ * PUT /api/members
+ * 更新成员权重
+ */
+export default defineEventHandler(async (event) => {
+  const user = await requireAuth(event)
+  const dormId = user.dormId
+  const body = await readBody(event)
+  const { memberId, weight } = body
+
+  if (!memberId || weight === undefined) {
+    throw createError({ statusCode: 400, message: '请指定成员和权重' })
+  }
+
+  const w = parseFloat(weight)
+  if (isNaN(w) || w < 0.5 || w > 3.0) {
+    throw createError({ statusCode: 400, message: '权重范围 0.5~3.0' })
+  }
+
+  const connection = await mysql.createConnection({
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306'),
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'dorm_cleaning',
+  })
+  const db = drizzle(connection)
+  const { members } = await import('~/server/models/schema')
+
+  await db.update(members)
+    .set({ weight: w.toString() })
+    .where(eq(members.id, memberId))
+
+  await connection.end()
+  return { success: true, message: '权重已更新' }
+})
