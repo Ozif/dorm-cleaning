@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { missedLogs, members } = await import('~/server/models/schema')
+  const { missedLogs, members, schedules } = await import('~/server/models/schema')
 
   // 联表查询
   const logs = await db
@@ -29,6 +29,13 @@ export default defineEventHandler(async (event) => {
     })
     .from(missedLogs)
     .leftJoin(members, eq(missedLogs.memberId, members.id))
+    .leftJoin(schedules, eq(missedLogs.scheduleId, schedules.id))
+    .where(
+      and(
+        eq(schedules.dormId, user.dormId),
+        eq(schedules.status, 'missed'),
+      ),
+    )
     .orderBy(desc(missedLogs.missedDate))
     .limit(100)
 

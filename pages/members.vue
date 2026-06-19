@@ -52,6 +52,7 @@ async function addMember() {
 }
 
 async function removeMember(i: number) {
+  if (!confirm(`确定要移除成员 ${members.value[i].name} 吗？`)) return
   await $fetch('/api/members', { method: 'DELETE', params: { memberId: members.value[i].id } })
   await loadMembers()
 }

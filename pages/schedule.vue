@@ -217,8 +217,13 @@ async function markDone(day: {memberId: number; date: string}) {
   selectedDay.value = null
 }
 
-function initiateSwap(day: {memberId: number; date: string}) {
-  alert(`发起互换：${day.date} 的 ${day.memberName}`)
+async function initiateSwap(day: {memberId: number; date: string}) {
+  const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
+  const sched = scheduleData.find(s => s.memberId === day.memberId)
+  if (sched) {
+    await $fetch('/api/swap', { method: 'POST', body: { scheduleId: sched.id } })
+    await loadData()
+  }
   selectedDay.value = null
 }
 
@@ -226,9 +231,10 @@ function openDayDetail(day: any) {
   selectedDay.value = { date: `${day.dayNum}日`, memberName: day.schedules?.[0]?.name || '', memberId: day.schedules?.[0]?.memberId || 0 }
 }
 
-function doGenerate() {
-  alert(`生成排班：${generateStart.value} 起 ${generateDays.value} 天`)
+async function doGenerate() {
+  await $fetch('/api/schedule/generate', { method: 'POST', body: { startDate: generateStart.value, days: generateDays.value } })
   showGenerate.value = false
+  await loadData()
 }
 </script>
 

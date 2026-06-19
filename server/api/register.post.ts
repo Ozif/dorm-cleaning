@@ -9,6 +9,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '请填写所有字段' })
   }
 
+  if (!process.env.SUPER_ADMIN_EMAIL) {
+    throw createError({ statusCode: 500, message: '系统未配置管理员邮箱，无法提交申请' })
+  }
+
   const { db } = getDb()
 
   const { dormConfig, registrationRequests } = await import('~/server/models/schema')
@@ -23,7 +27,7 @@ export default defineEventHandler(async (event) => {
     eq(registrationRequests.dormName, dorm_name),
   ).limit(1)
   if (pendingRequest) {
-    throw createError({ statusCode: 409, message: '宿舍名已存在，请更换名称' })
+    throw createError({ statusCode: 409, message: '该宿舍已有待审核的注册申请' })
   }
   const crypto = await import('node:crypto')
 

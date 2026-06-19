@@ -10,10 +10,9 @@
  * - 00:00 → 标记未完成 + 通知管理员
  */
 import cron from 'node-cron'
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq, and, gte, lte, inArray, isNull } from 'drizzle-orm'
 import { emailService } from '~/server/utils/email'
+import { getDb } from '~/server/utils/db'
 
 interface TaskInfo {
   name: string
@@ -72,16 +71,9 @@ export class CronService {
    * 获取数据库连接
    */
   private async getDb() {
-    const connection = await mysql.createConnection({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'dorm_cleaning',
-    })
-    const db = drizzle(connection)
+    const { db } = getDb()
     const schema = await import('~/server/models/schema')
-    return { connection, db, schema }
+    return { db, schema }
   }
 
   /**
@@ -153,10 +145,9 @@ export class CronService {
    */
   private async taskReminderFirst(): Promise<string> {
     try {
-      const { connection, db, schema } = await this.getDb()
+      const { db, schema } = await this.getDb()
       const todaySchedules = await this.getTodayPendingSchedules(db, schema)
       if (todaySchedules.length === 0) {
-        await connection.end()
         return '今天无人值班'
       }
 
@@ -181,7 +172,6 @@ export class CronService {
         })
         if (ok) sent++
       }
-      await connection.end()
       return `首次提醒：共 ${todaySchedules.length} 人，成功发送 ${sent} 封`
     } catch (err: any) {
       return `提醒任务出错: ${err.message}`
@@ -193,10 +183,9 @@ export class CronService {
    */
   private async taskFollowUp(level: number): Promise<string> {
     try {
-      const { connection, db, schema } = await this.getDb()
+      const { db, schema } = await this.getDb()
       const todaySchedules = await this.getTodayPendingSchedules(db, schema)
       if (todaySchedules.length === 0) {
-        await connection.end()
         return `第 ${level} 次催办：今天无人值班`
       }
 
@@ -221,7 +210,6 @@ export class CronService {
         })
         if (ok) sent++
       }
-      await connection.end()
       return `第 ${level} 次催办：共 ${todaySchedules.length} 人，成功发送 ${sent} 封`
     } catch (err: any) {
       return `催办任务出错: ${err.message}`
@@ -236,7 +224,7 @@ export class CronService {
    */
   private async taskMarkMissed(): Promise<string> {
     try {
-      const { connection, db, schema } = await this.getDb()
+      const { db, schema } = await this.getDb()
       const { schedules, missedLogs, members, dormConfig } = schema
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
       const dateStr = yesterday.toISOString().slice(0, 10)
@@ -261,7 +249,6 @@ export class CronService {
         )
 
       if (pendingList.length === 0) {
-        await connection.end()
         return '昨天无人漏扫'
       }
 
@@ -311,7 +298,6 @@ export class CronService {
         )
       }
 
-      await connection.end()
       return `标记漏扫：共 ${pendingList.length} 人漏扫，已发送 ${sentWarnings} 封警告`
     } catch (err: any) {
       return `标记漏扫任务出错: ${err.message}`

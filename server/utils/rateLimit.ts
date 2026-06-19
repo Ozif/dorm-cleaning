@@ -1,3 +1,5 @@
+// NOTE: unused - DB-based rate limiting in send-code.post.ts is used instead
+
 /**
  * 速率限制工具
  * 内存级速率限制器，用于 API 调用频率控制

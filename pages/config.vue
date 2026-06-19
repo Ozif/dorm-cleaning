@@ -22,7 +22,7 @@
       <h3>打扫任务列表</h3>
       <ul class="task-list">
         <li v-for="(task, i) in tasks" :key="i" class="task-item">
-          <span>{{ task }}</span>
+          <span>{{ task.taskName }}</span>
           <button class="btn-sm danger" @click="removeTask(i)">删除</button>
         </li>
       </ul>
@@ -37,20 +37,33 @@
 <script setup lang="ts">
 const frequencyType = ref<'weekly' | 'monthly'>('weekly')
 const frequencyCount = ref(3)
-const tasks = ref<string[]>(['扫地', '拖地', '倒垃圾'])
+const tasks = ref<Array<{ id: number; taskName: string }>>([])
 const newTask = ref('')
 
-function addTask() {
+onMounted(async () => {
+  const [config, taskList] = await Promise.all([
+    $fetch('/api/dorm/config'),
+    $fetch('/api/dorm/tasks'),
+  ])
+  frequencyType.value = config.frequencyType
+  frequencyCount.value = config.frequencyCount
+  tasks.value = taskList
+})
+
+async function addTask() {
   if (newTask.value.trim()) {
-    tasks.value.push(newTask.value.trim())
+    await $fetch('/api/dorm/tasks', { method: 'POST', body: { taskName: newTask.value.trim() } })
     newTask.value = ''
+    tasks.value = await $fetch('/api/dorm/tasks')
   }
 }
-function removeTask(i: number) {
-  tasks.value.splice(i, 1)
+async function removeTask(i: number) {
+  await $fetch('/api/dorm/tasks/delete', { method: 'POST', body: { taskId: tasks.value[i].id } })
+  tasks.value = await $fetch('/api/dorm/tasks')
 }
-function saveConfig() {
-  alert('配置已保存（API 待连接）')
+async function saveConfig() {
+  await $fetch('/api/dorm/config', { method: 'PUT', body: { frequencyType: frequencyType.value, frequencyCount: frequencyCount.value } })
+  alert('配置已保存 ✅')
 }
 </script>
 

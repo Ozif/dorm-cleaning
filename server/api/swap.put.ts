@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
+import { emailService } from '~/server/utils/email'
 
 /**
  * PUT /api/swap
@@ -80,6 +81,18 @@ export default defineEventHandler(async (event) => {
       swappedAt: new Date(),
     })
     .where(eq(swapLogs.id, swapId))
+
+  // 发送互换通知给双方
+  const { members } = await import('~/server/models/schema')
+  const [memberA] = await db.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
+  const [memberB] = await db.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
+
+  if (memberA && memberB) {
+    const dateA = schedA.scheduledDate
+    const dateB = schedB.scheduledDate
+    await emailService.sendSwapNotification(memberA.email, memberB.name, dateB, dateA)
+    await emailService.sendSwapNotification(memberB.email, memberA.name, dateA, dateB)
+  }
 
   return { success: true, message: '互换已批准 🎉' }
 })
