@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -8,6 +8,7 @@ import { requireAuth } from '~/server/utils/auth'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
+  if (!user.isAdmin) throw createError({ statusCode: 403, message: '仅管理员可操作' })
   const dormId = user.dormId
   const body = await readBody(event)
   const { taskName } = body
@@ -19,19 +20,15 @@ export default defineEventHandler(async (event) => {
   const { db } = getDb()
   const { cleaningTasks } = await import('~/server/models/schema')
 
-  await db.transaction(async (tx) => {
-    const tasks = await tx.select()
-      .from(cleaningTasks)
-      .where(eq(cleaningTasks.dormId, dormId))
-      .orderBy(cleaningTasks.sortOrder)
+  const [result] = await db.select({ maxSort: sql<number>`MAX(${cleaningTasks.sortOrder})` })
+    .from(cleaningTasks)
+    .where(eq(cleaningTasks.dormId, dormId))
+  const maxSort = result.maxSort || 0
 
-    const maxSort = tasks.length > 0 ? tasks[tasks.length - 1].sortOrder : 0
-
-    await tx.insert(cleaningTasks).values({
-      dormId,
-      taskName,
-      sortOrder: maxSort + 1,
-    })
+  await db.insert(cleaningTasks).values({
+    dormId,
+    taskName,
+    sortOrder: maxSort + 1,
   })
 
   return { success: true, message: '任务已添加' }

@@ -74,6 +74,14 @@ interface CronStatus {
   tasks: TaskInfo[]
 }
 
+const taskIdMap: Record<string, string> = {
+  '首次提醒': 'reminder-first',
+  '第 1 次催办': 'followup-1',
+  '第 2 次催办': 'followup-2',
+  '第 3 次催办': 'followup-3',
+  '标记漏扫': 'mark-missed',
+}
+
 const cronStatus = ref<CronStatus>({ running: false, tasks: [] })
 const loading = ref(false)
 const message = ref('')
@@ -126,9 +134,10 @@ async function stopCron() {
 async function triggerTask(name: string) {
   loading.value = true
   try {
+    const taskId = taskIdMap[name] || name
     const data = await $fetch<{ success: boolean; result: string }>('/api/cron/trigger', {
       method: 'POST',
-      body: { taskId: name },
+      body: { taskId },
     })
     showMsg(data.result, 'success')
     await fetchStatus()

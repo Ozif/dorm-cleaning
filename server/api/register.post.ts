@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!process.env.SUPER_ADMIN_EMAIL) {
-    throw createError({ statusCode: 500, message: '系统未配置管理员邮箱，无法提交申请' })
+    throw createError({ statusCode: 500, message: '系统未配置管理员邮箱，请联系管理员' })
   }
 
   const { db } = getDb()
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const [pendingRequest] = await db.select().from(registrationRequests).where(
-    eq(registrationRequests.dormName, dorm_name),
+    and(eq(registrationRequests.dormName, dorm_name), eq(registrationRequests.status, 'pending')),
   ).limit(1)
   if (pendingRequest) {
     throw createError({ statusCode: 409, message: '该宿舍已有待审核的注册申请' })

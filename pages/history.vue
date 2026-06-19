@@ -42,17 +42,20 @@ interface Record {
 const records = ref<Record[]>([])
 
 onMounted(async () => {
-  const data: Array<{ id: number; scheduledDate: string; memberName: string; status: string; completedAt: string | null }> = await $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } })
+  const now = new Date()
+  const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10)
+  const end = now.toISOString().slice(0, 10)
+  const data: Array<{ id: number; scheduledDate: string; memberName: string; status: string; completedAt: string | null }> = await $fetch('/api/schedule', { params: { start, end } })
   records.value = data
     .filter(s => s.status === 'done' || s.status === 'missed')
+    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
     .map(s => ({
       id: s.id,
-      date: s.scheduledDate.slice(5),
+      date: s.scheduledDate,
       member: s.memberName,
       status: s.status as 'done' | 'missed',
       completedAt: s.completedAt ? s.completedAt.slice(11, 16) : null,
     }))
-    .sort((a, b) => b.id - a.id)
 })
 
 const filteredRecords = computed(() => {

@@ -40,11 +40,24 @@
         </span>
       </div>
     </div>
+
+    <!-- Toast -->
+    <div v-if="toastMessage" class="toast" :class="toastType">
+      {{ toastMessage }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 const tab = ref<'pending' | 'history'>('pending')
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  toastMessage.value = msg
+  toastType.value = type
+  setTimeout(() => { toastMessage.value = '' }, 3000)
+}
 
 interface SwapItem {
   id: number
@@ -60,10 +73,13 @@ const pendingSwaps = ref<SwapItem[]>([])
 const swapHistory = ref<SwapItem[]>([])
 
 onMounted(async () => {
+  const now = new Date()
+  const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10)
+  const end = now.toISOString().slice(0, 10)
   const [swapData, memberData, scheduleData] = await Promise.all([
     $fetch('/api/swap'),
     $fetch('/api/members'),
-    $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } }),
+    $fetch('/api/schedule', { params: { start, end } }),
   ])
 
   const memberMap = new Map((memberData as Array<{ id: number; name: string }>).map(m => [m.id, m.name]))
@@ -81,41 +97,54 @@ onMounted(async () => {
     id: s.id,
     fromName: memberMap.get(s.fromMemberA) || '未知',
     toName: memberMap.get(s.toMemberB) || '未知',
-    dateA: (scheduleMap.get(s.scheduleIdA) || '').slice(5),
-    dateB: (scheduleMap.get(s.scheduleIdB) || '').slice(5),
+    dateA: scheduleMap.get(s.scheduleIdA) || '',
+    dateB: scheduleMap.get(s.scheduleIdB) || '',
     canApprove: s.canApprove,
     status: s.status,
   }))
 
-  pendingSwaps.value = allItems.filter(s => s.status === 'pending')
-  swapHistory.value = allItems.filter(s => s.status !== 'pending')
-})
-
-async function approveSwap(id: number) {
-  await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'approve' } })
-  tab.value = 'history'
-  // Refresh data
-  const swapData = await $fetch('/api/swap')
-  const memberData = await $fetch('/api/members')
-  const scheduleData = await $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } })
-  const memberMap = new Map((memberData as Array<{ id: number; name: string }>).map(m => [m.id, m.name]))
-  const scheduleMap = new Map((scheduleData as Array<{ id: number; scheduledDate: string }>).map(s => [s.id, s.scheduledDate]))
-  const allItems: SwapItem[] = (swapData as Array<any>).map(s => ({
-    id: s.id,
-    fromName: memberMap.get(s.fromMemberA) || '未知',
-    toName: memberMap.get(s.toMemberB) || '未知',
-    dateA: (scheduleMap.get(s.scheduleIdA) || '').slice(5),
-    dateB: (scheduleMap.get(s.scheduleIdB) || '').slice(5),
-    canApprove: s.canApprove,
-    status: s.status,
-  }))
   pendingSwaps.value = allItems.filter(s => s.status === 'pending')
   swapHistory.value = allItems.filter(s => s.status !== 'pending')
 }
 
+async function approveSwap(id: number) {
+  try {
+    await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'approve' } })
+    showToast('已批准互换 ✅', 'success')
+    tab.value = 'history'
+    // Refresh data
+    const now = new Date()
+    const start = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()).toISOString().slice(0, 10)
+    const end = now.toISOString().slice(0, 10)
+    const swapData = await $fetch('/api/swap')
+    const memberData = await $fetch('/api/members')
+    const scheduleData = await $fetch('/api/schedule', { params: { start, end } })
+    const memberMap = new Map((memberData as Array<{ id: number; name: string }>).map(m => [m.id, m.name]))
+    const scheduleMap = new Map((scheduleData as Array<{ id: number; scheduledDate: string }>).map(s => [s.id, s.scheduledDate]))
+    const allItems: SwapItem[] = (swapData as Array<any>).map(s => ({
+      id: s.id,
+      fromName: memberMap.get(s.fromMemberA) || '未知',
+      toName: memberMap.get(s.toMemberB) || '未知',
+      dateA: scheduleMap.get(s.scheduleIdA) || '',
+      dateB: scheduleMap.get(s.scheduleIdB) || '',
+      canApprove: s.canApprove,
+      status: s.status,
+    }))
+    pendingSwaps.value = allItems.filter(s => s.status === 'pending')
+    swapHistory.value = allItems.filter(s => s.status !== 'pending')
+  } catch {
+    showToast('批准失败，请重试', 'error')
+  }
+}
+
 async function rejectSwap(id: number) {
-  await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'reject' } })
-  pendingSwaps.value = pendingSwaps.value.filter(s => s.id !== id)
+  try {
+    await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'reject' } })
+    showToast('已拒绝互换', 'success')
+    pendingSwaps.value = pendingSwaps.value.filter(s => s.id !== id)
+  } catch {
+    showToast('拒绝失败，请重试', 'error')
+  }
 }
 </script>
 
@@ -136,4 +165,17 @@ async function rejectSwap(id: number) {
 .btn-reject { flex: 1; padding: 10px; background: #f3f4f6; color: #666; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; cursor: pointer; }
 .swap-pending-badge { text-align: center; color: #d97706; font-size: 14px; }
 .status-badge { font-size: 13px; font-weight: 500; }
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.toast.success { background: #16a34a; color: #fff; }
+.toast.error { background: #ef4444; color: #fff; }
 </style>

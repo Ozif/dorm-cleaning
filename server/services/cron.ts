@@ -252,40 +252,41 @@ export class CronService {
         return '昨天无人漏扫'
       }
 
-      // 更新状态为 missed
+      // 更新状态为 missed + 记录 missed_logs（原子操作）
       const pendingIds = pendingList.map((p: any) => p.scheduleId)
-      await db
-        .update(schedules)
-        .set({ status: 'missed' })
-        .where(inArray(schedules.id, pendingIds))
-
-      // 记录到 missed_logs
       let sentWarnings = 0
-      for (const p of pendingList) {
-        await db.insert(missedLogs).values({
-          scheduleId: p.scheduleId,
-          memberId: p.memberId,
-          missedDate: p.scheduledDate,
-          status: 'missed',
-        })
+      await db.transaction(async (tx) => {
+        await tx
+          .update(schedules)
+          .set({ status: 'missed' })
+          .where(inArray(schedules.id, pendingIds))
 
-        // 发送漏扫警告
-        const ok = await emailService.sendMissedWarning(
-          p.memberEmail,
-          p.memberName,
-          p.scheduledDate,
-        )
-        await this.logEmail(db, schema, {
-          dormId: p.dormId,
-          scheduleId: p.scheduleId,
-          memberId: p.memberId,
-          email: p.memberEmail,
-          emailType: 'missed_warning',
-          subject: `宿舍漏扫警告 - ${p.scheduledDate}`,
-          status: ok ? 'success' : 'failed',
-        })
-        if (ok) sentWarnings++
-      }
+        for (const p of pendingList) {
+          await tx.insert(missedLogs).values({
+            scheduleId: p.scheduleId,
+            memberId: p.memberId,
+            missedDate: p.scheduledDate,
+            status: 'missed',
+          })
+
+          // 发送漏扫警告
+          const ok = await emailService.sendMissedWarning(
+            p.memberEmail,
+            p.memberName,
+            p.scheduledDate,
+          )
+          await this.logEmail(tx, schema, {
+            dormId: p.dormId,
+            scheduleId: p.scheduleId,
+            memberId: p.memberId,
+            email: p.memberEmail,
+            emailType: 'missed_warning',
+            subject: `宿舍漏扫警告 - ${p.scheduledDate}`,
+            status: ok ? 'success' : 'failed',
+          })
+          if (ok) sentWarnings++
+        }
+      })
 
       // 通知超级管理员
       const adminEmail = process.env.SUPER_ADMIN_EMAIL

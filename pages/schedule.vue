@@ -61,11 +61,40 @@
     <div v-if="selectedDay" class="modal-overlay" @click.self="selectedDay = null">
       <div class="modal-card">
         <h4>{{ selectedDay.date }}</h4>
-        <p class="modal-member">{{ selectedDay.memberName }}</p>
+        <div v-if="selectedDay.members.length === 0" class="empty">暂无排班数据</div>
+        <div v-for="m in selectedDay.members" :key="m.memberId" class="member-block">
+          <p class="modal-member">{{ m.memberName }}</p>
+          <div class="modal-actions">
+            <button class="btn-action done" @click="markDone({memberId: m.memberId, date: selectedDay.date})">✅ 打卡完成</button>
+            <button class="btn-action swap" @click="initiateSwap({memberId: m.memberId, date: selectedDay.date})">🔄 发起互换</button>
+          </div>
+        </div>
+        <button class="btn-action cancel" @click="selectedDay = null" style="margin-top: 12px;">关闭</button>
+      </div>
+    </div>
+
+    <!-- 互换弹窗 -->
+    <div v-if="showSwapDialog" class="modal-overlay" @click.self="showSwapDialog = false">
+      <div class="modal-card">
+        <h4>发起互换</h4>
+        <p>您的日期：{{ swapFromDate }}</p>
+        <div class="form-group">
+          <label>选择互换对象</label>
+          <select v-model="swapTargetMemberId" class="form-select">
+            <option value="0" disabled>请选择成员</option>
+            <option v-for="m in otherMembers" :key="m.id" :value="m.id">{{ m.name }}</option>
+          </select>
+        </div>
+        <div class="form-group" v-if="swapTargetMemberId">
+          <label>选择对方日期</label>
+          <select v-model="swapTargetScheduleId" class="form-select">
+            <option value="0" disabled>请选择日期</option>
+            <option v-for="s in targetSchedules" :key="s.id" :value="s.id">{{ s.scheduledDate }}</option>
+          </select>
+        </div>
         <div class="modal-actions">
-          <button class="btn-action done" @click="markDone(selectedDay)">✅ 打卡完成</button>
-          <button class="btn-action swap" @click="initiateSwap(selectedDay)">🔄 发起互换</button>
-          <button class="btn-action cancel" @click="selectedDay = null">取消</button>
+          <button class="btn-action done" :disabled="!swapTargetScheduleId" @click="confirmSwap">确认互换</button>
+          <button class="btn-action cancel" @click="showSwapDialog = false">取消</button>
         </div>
       </div>
     </div>
@@ -88,6 +117,11 @@
         </div>
       </div>
     </div>
+
+    <!-- Toast -->
+    <div v-if="toastMessage" class="toast" :class="toastType">
+      {{ toastMessage }}
+    </div>
   </div>
 </template>
 
@@ -96,10 +130,28 @@ const view = ref<'week' | 'month'>('week')
 const showGenerate = ref(false)
 const generateStart = ref('')
 const generateDays = ref(7)
-const selectedDay = ref<{date: string; memberName: string; memberId: number} | null>(null)
+const selectedDay = ref<{date: string; members: Array<{memberId: number; memberName: string}>} | null>(null)
+const showSwapDialog = ref(false)
+const swapFromScheduleId = ref<number>(0)
+const swapFromDate = ref('')
+const swapFromMemberId = ref<number>(0)
+const swapTargetMemberId = ref<number>(0)
+const swapTargetScheduleId = ref<number>(0)
+const targetSchedules = ref<Array<{id: number; scheduledDate: string; status: string}>>([])
+const otherMembers = computed(() => members.value.filter(m => m.id !== swapFromMemberId.value))
+
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  toastMessage.value = msg
+  toastType.value = type
+  setTimeout(() => { toastMessage.value = '' }, 3000)
+}
 
 const members = ref<Array<{ id: number; name: string }>>([])
 const scheduleMap = ref<Record<number, Record<string, string>>>({})
+const markingDone = ref(false)
 
 // 本周日期
 const today = new Date()
@@ -155,7 +207,7 @@ const monthDays = computed(() => {
         scheds.push({ memberId: Number(memberIdStr), name: m?.name || '未知', status })
       }
     }
-    days.push({ dayNum: i, currentMonth: true, schedules: scheds })
+    days.push({ dayNum: i, currentMonth: true, schedules: scheds, date: dateStr })
   }
   return days
 })
@@ -191,7 +243,7 @@ function getCellClass(memberId: number, date: string): string {
 
 function openAction(member: {id: number; name: string}, day: {date: string}) {
   if (getSchedule(member.id, day.date) === 'rest') return
-  selectedDay.value = { date: day.date, memberName: member.name, memberId: member.id }
+  selectedDay.value = { date: day.date, members: [{ memberId: member.id, memberName: member.name }] }
 }
 
 function prevPeriod() {
@@ -207,34 +259,79 @@ function nextPeriod() {
 }
 
 async function markDone(day: {memberId: number; date: string}) {
-  // Find the schedule record id from the loaded data
-  const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
-  const sched = scheduleData.find(s => s.memberId === day.memberId)
-  if (sched) {
-    await $fetch('/api/schedule/complete', { method: 'POST', body: { scheduleId: sched.id } })
-    await loadData()
+  if (markingDone.value) return
+  markingDone.value = true
+  try {
+    const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
+    const sched = scheduleData.find(s => s.memberId === day.memberId)
+    if (sched) {
+      await $fetch('/api/schedule/complete', { method: 'POST', body: { scheduleId: sched.id } })
+      await loadData()
+    }
+    selectedDay.value = null
+  } finally {
+    markingDone.value = false
   }
-  selectedDay.value = null
 }
+
+watch(swapTargetMemberId, async (id) => {
+  if (!id) { targetSchedules.value = []; return }
+  const data: Array<{id: number; memberId: number; scheduledDate: string; status: string}> = await $fetch('/api/schedule', { params: { start: weekStartStr.value, end: weekEndStr.value } })
+  targetSchedules.value = data.filter(s => s.memberId === id && s.status === 'pending')
+})
 
 async function initiateSwap(day: {memberId: number; date: string}) {
   const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
   const sched = scheduleData.find(s => s.memberId === day.memberId)
-  if (sched) {
-    await $fetch('/api/swap', { method: 'POST', body: { scheduleId: sched.id } })
-    await loadData()
-  }
+  if (!sched) return
+  swapFromScheduleId.value = sched.id
+  swapFromDate.value = day.date
+  swapFromMemberId.value = day.memberId
+  swapTargetMemberId.value = 0
+  swapTargetScheduleId.value = 0
+  targetSchedules.value = []
   selectedDay.value = null
+  showSwapDialog.value = true
+}
+
+async function confirmSwap() {
+  if (!swapTargetScheduleId.value) return
+  try {
+    await $fetch('/api/swap', {
+      method: 'POST',
+      body: {
+        scheduleIdA: swapFromScheduleId.value,
+        scheduleIdB: swapTargetScheduleId.value,
+        fromMemberA: swapFromMemberId.value,
+        toMemberB: swapTargetMemberId.value,
+      }
+    })
+    showSwapDialog.value = false
+    await loadData()
+  } catch {
+    showToast('互换请求发起失败', 'error')
+  }
 }
 
 function openDayDetail(day: any) {
-  selectedDay.value = { date: `${day.dayNum}日`, memberName: day.schedules?.[0]?.name || '', memberId: day.schedules?.[0]?.memberId || 0 }
+  if (!day.schedules || day.schedules.length === 0) return
+  selectedDay.value = {
+    date: day.date,
+    members: day.schedules.map((s: any) => ({
+      memberId: s.memberId,
+      memberName: s.name || '未知',
+    })),
+  }
 }
 
 async function doGenerate() {
-  await $fetch('/api/schedule/generate', { method: 'POST', body: { startDate: generateStart.value, days: generateDays.value } })
-  showGenerate.value = false
-  await loadData()
+  try {
+    await $fetch('/api/schedule/generate', { method: 'POST', body: { startDate: generateStart.value, days: generateDays.value } })
+    showGenerate.value = false
+    await loadData()
+  } catch {
+    showToast('生成排班失败', 'error')
+  }
 }
 </script>
 
@@ -283,10 +380,19 @@ async function doGenerate() {
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal-card { background: #fff; border-radius: 16px; padding: 24px; width: 85%; max-width: 320px; }
 .modal-card h4 { margin: 0 0 4px; font-size: 16px; color: #333; }
-.modal-member { font-size: 18px; font-weight: 600; color: #4f46e5; margin-bottom: 20px; }
+.modal-member { font-size: 18px; font-weight: 600; color: #4f46e5; margin-bottom: 8px; }
+.member-block { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; }
+.member-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.empty { text-align: center; padding: 12px; color: #999; font-size: 14px; }
 .modal-actions { display: flex; flex-direction: column; gap: 8px; }
 .btn-action { width: 100%; padding: 12px; border: none; border-radius: 10px; font-size: 15px; cursor: pointer; }
 .btn-action.done { background: #4f46e5; color: #fff; }
 .btn-action.swap { background: #fef3c7; color: #d97706; }
 .btn-action.cancel { background: #f3f4f6; color: #666; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
+.form-select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: #fff; }
+.toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 8px; font-size: 14px; z-index: 2000; color: #fff; }
+.toast.success { background: #16a34a; }
+.toast.error { background: #dc2626; }
 </style>

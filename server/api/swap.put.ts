@@ -57,42 +57,50 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: '排班记录不存在' })
   }
 
-  // 交换 member_id
-  await db.update(schedules)
-    .set({
-      memberId: schedB.memberId,
-      status: 'pending',
-      swappedWith: schedB.id,
-    })
-    .where(eq(schedules.id, schedA.id))
-
-  await db.update(schedules)
-    .set({
-      memberId: schedA.memberId,
-      status: 'pending',
-      swappedWith: schedA.id,
-    })
-    .where(eq(schedules.id, schedB.id))
-
-  // 更新互换日志
-  await db.update(swapLogs)
-    .set({
-      status: 'approved',
-      swappedAt: new Date(),
-    })
-    .where(eq(swapLogs.id, swapId))
-
-  // 发送互换通知给双方
-  const { members } = await import('~/server/models/schema')
-  const [memberA] = await db.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
-  const [memberB] = await db.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
-
-  if (memberA && memberB) {
-    const dateA = schedA.scheduledDate
-    const dateB = schedB.scheduledDate
-    await emailService.sendSwapNotification(memberA.email, memberB.name, dateB, dateA)
-    await emailService.sendSwapNotification(memberB.email, memberA.name, dateA, dateB)
+  // 验证排班属于同一个宿舍
+  if (schedA.dormId !== user.dormId || schedB.dormId !== user.dormId) {
+    throw createError({ statusCode: 403, message: '排班不属于您的宿舍' })
   }
+
+  // 原子化执行所有写操作
+  await db.transaction(async (tx) => {
+    // 交换 member_id
+    await tx.update(schedules)
+      .set({
+        memberId: schedB.memberId,
+        status: 'pending',
+        swappedWith: schedB.id,
+      })
+      .where(eq(schedules.id, schedA.id))
+
+    await tx.update(schedules)
+      .set({
+        memberId: schedA.memberId,
+        status: 'pending',
+        swappedWith: schedA.id,
+      })
+      .where(eq(schedules.id, schedB.id))
+
+    // 更新互换日志
+    await tx.update(swapLogs)
+      .set({
+        status: 'approved',
+        swappedAt: new Date(),
+      })
+      .where(eq(swapLogs.id, swapId))
+
+    // 发送互换通知给双方
+    const { members } = await import('~/server/models/schema')
+    const [memberA] = await tx.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
+    const [memberB] = await tx.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
+
+    if (memberA && memberB) {
+      const dateA = schedA.scheduledDate
+      const dateB = schedB.scheduledDate
+      await emailService.sendNotification(memberA.email, '换班已批准', `您好，您与 ${memberB.name} 的换班请求已批准！\n您将承担 ${dateB} 的值班，${memberB.name} 将承担 ${dateA} 的值班。`)
+      await emailService.sendNotification(memberB.email, '换班已批准', `您好，${memberA.name} 与您的换班请求已批准！\n您将承担 ${dateA} 的值班，${memberA.name} 将承担 ${dateB} 的值班。`)
+    }
+  })
 
   return { success: true, message: '互换已批准 🎉' }
 })

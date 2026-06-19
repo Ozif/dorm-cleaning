@@ -19,9 +19,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members } = await import('~/server/models/schema')
+  const { members, dormConfig } = await import('~/server/models/schema')
 
-  // 查找管理员
+  // 查找成员
   const memberList = await db.select()
     .from(members)
     .where(eq(members.email, email))
@@ -32,6 +32,14 @@ export default defineEventHandler(async (event) => {
   }
 
   const member = memberList[0]
+
+  // 查询宿舍配置，判断是否为管理员
+  const configList = await db.select()
+    .from(dormConfig)
+    .where(eq(dormConfig.id, member.dormId))
+    .limit(1)
+
+  const isAdmin = configList.length > 0 && configList[0].adminMemberId === member.id
 
   // 验证验证码
   if (member.loginCode !== code) {
@@ -56,7 +64,7 @@ export default defineEventHandler(async (event) => {
     dormId: member.dormId,
     email: member.email,
     name: member.name,
-    isAdmin: true,
+    isAdmin,
     loginAt: Date.now(),
   }
 

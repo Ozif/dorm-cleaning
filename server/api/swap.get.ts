@@ -1,4 +1,4 @@
-import { or, eq } from 'drizzle-orm'
+import { or, eq, and } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -20,14 +20,18 @@ export default defineEventHandler(async (event) => {
     eq(swapLogs.fromMemberA, user.memberId),
     eq(swapLogs.toMemberB, user.memberId),
   )
+  if (statusFilter) conditions = and(conditions, eq(swapLogs.status, statusFilter))
 
   // 管理员可以查看宿舍所有互换请求
   const { schedules } = await import('~/server/models/schema')
   if (user.isAdmin) {
+    let adminConditions = eq(schedules.dormId, user.dormId)
+    if (statusFilter) adminConditions = and(adminConditions, eq(swapLogs.status, statusFilter))
+
     const swapList = await db.select()
       .from(swapLogs)
       .innerJoin(schedules, eq(swapLogs.scheduleIdA, schedules.id))
-      .where(eq(schedules.dormId, user.dormId))
+      .where(adminConditions)
       .orderBy(swapLogs.createdAt)
 
     return swapList.map(s => ({

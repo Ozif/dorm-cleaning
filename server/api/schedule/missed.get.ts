@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, or, desc, alias } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
 
   const { db } = getDb()
   const { missedLogs, members, schedules } = await import('~/server/models/schema')
+  const clearedMembers = alias(members, 'cleared_members')
 
   // 联表查询
   const logs = await db
@@ -26,15 +27,14 @@ export default defineEventHandler(async (event) => {
       status: missedLogs.status,
       clearedBy: missedLogs.clearedBy,
       clearedAt: missedLogs.clearedAt,
+      clearedByName: clearedMembers.name,
     })
     .from(missedLogs)
-    .leftJoin(members, eq(missedLogs.memberId, members.id))
-    .leftJoin(schedules, eq(missedLogs.scheduleId, schedules.id))
+    .leftJoin(members, and(eq(missedLogs.memberId, members.id), eq(members.dormId, user.dormId)))
+    .leftJoin(clearedMembers, eq(missedLogs.clearedBy, clearedMembers.id))
+    .leftJoin(schedules, and(eq(missedLogs.scheduleId, schedules.id), eq(schedules.status, 'missed')))
     .where(
-      and(
-        eq(schedules.dormId, user.dormId),
-        eq(schedules.status, 'missed'),
-      ),
+      or(eq(schedules.status, 'missed'), eq(missedLogs.status, 'cleared')),
     )
     .orderBy(desc(missedLogs.missedDate))
     .limit(100)

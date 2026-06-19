@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 import { schedulerService } from '~/server/services/scheduler'
@@ -40,30 +40,34 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '宿舍暂无成员，请先添加成员' })
   }
 
+  const config = configList[0]
+
   // 用排班算法生成
-  const assignments = schedulerService.generateSchedule(memberList, startDate, days)
+  const assignments = schedulerService.generateSchedule(memberList, startDate, days, config.frequencyCount, config.frequencyType)
 
   if (assignments.length === 0) {
     throw createError({ statusCode: 500, message: '排班生成失败' })
   }
 
   // 批量写入数据库
-  for (const a of assignments) {
-    // 检查是否已存在该日期的排班
-    const existing = await db.select()
-      .from(schedules)
-      .where(and(eq(schedules.dormId, dormId), eq(schedules.scheduledDate, a.scheduledDate)))
-      .limit(1)
+  const dates = assignments.map(a => a.scheduledDate)
+  const existingSchedules = await db.select({ scheduledDate: schedules.scheduledDate })
+    .from(schedules)
+    .where(and(eq(schedules.dormId, dormId), inArray(schedules.scheduledDate, dates)))
 
-    if (existing.length === 0) {
-      await db.insert(schedules).values({
-        dormId,
-        memberId: a.memberId,
-        scheduledDate: a.scheduledDate,
-        weekNumber: a.weekNumber,
-        status: 'pending',
-      })
-    }
+  const existingDates = new Set(existingSchedules.map(s => s.scheduledDate))
+  const newAssignments = assignments
+    .filter(a => !existingDates.has(a.scheduledDate))
+    .map(a => ({
+      dormId,
+      memberId: a.memberId,
+      scheduledDate: a.scheduledDate,
+      weekNumber: a.weekNumber,
+      status: 'pending' as const,
+    }))
+
+  if (newAssignments.length > 0) {
+    await db.insert(schedules).values(newAssignments)
   }
 
   return {

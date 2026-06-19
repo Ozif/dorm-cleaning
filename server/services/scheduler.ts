@@ -30,12 +30,16 @@ export class SchedulerService {
    * @param members 宿舍成员列表（含权重）
    * @param startDate 开始日期（YYYY-MM-DD）
    * @param days 要排班的天数
+   * @param frequencyCount 每周期分配次数（如每周3次）
+   * @param frequencyType 周期类型 'weekly' | 'monthly'
    * @returns 排班分配结果数组
    */
   generateSchedule(
     memberList: Member[],
     startDate: string,
     days: number,
+    frequencyCount: number = 1,
+    frequencyType: string = 'weekly',
   ): ScheduleAssignment[] {
     if (memberList.length === 0) return []
 
@@ -59,9 +63,22 @@ export class SchedulerService {
     // 记录上一个值班人（防止连续）
     let lastMemberId = -1
 
-    for (let i = 0; i < days; i++) {
+    // 根据 frequencyType + frequencyCount 计算需要排班的天索引
+    const periodDays = frequencyType === 'monthly' ? 30 : 7
+    const assignmentDayOffsets = new Set<number>()
+    for (let periodStart = 0; periodStart < days; periodStart += periodDays) {
+      for (let slot = 0; slot < frequencyCount; slot++) {
+        const offset = periodStart + Math.floor(slot * periodDays / frequencyCount)
+        if (offset < days) {
+          assignmentDayOffsets.add(offset)
+        }
+      }
+    }
+    const sortedOffsets = [...assignmentDayOffsets].sort((a, b) => a - b)
+
+    for (const offset of sortedOffsets) {
       const currentDate = new Date(start)
-      currentDate.setDate(start.getDate() + i)
+      currentDate.setDate(start.getDate() + offset)
       const dateStr = currentDate.toISOString().slice(0, 10)
       const weekNumber = this.getWeekNumber(currentDate)
 

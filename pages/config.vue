@@ -31,6 +31,11 @@
         <button class="btn-sm" @click="addTask">添加</button>
       </div>
     </section>
+
+    <!-- Toast -->
+    <div v-if="toastMessage" class="toast" :class="toastType">
+      {{ toastMessage }}
+    </div>
   </div>
 </template>
 
@@ -39,31 +44,53 @@ const frequencyType = ref<'weekly' | 'monthly'>('weekly')
 const frequencyCount = ref(3)
 const tasks = ref<Array<{ id: number; taskName: string }>>([])
 const newTask = ref('')
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  toastMessage.value = msg
+  toastType.value = type
+  setTimeout(() => { toastMessage.value = '' }, 3000)
+}
 
 onMounted(async () => {
-  const [config, taskList] = await Promise.all([
+  const [configData, taskList] = await Promise.all([
     $fetch('/api/dorm/config'),
     $fetch('/api/dorm/tasks'),
   ])
-  frequencyType.value = config.frequencyType
-  frequencyCount.value = config.frequencyCount
+  frequencyType.value = configData.config.frequencyType
+  frequencyCount.value = configData.config.frequencyCount
   tasks.value = taskList
 })
 
 async function addTask() {
   if (newTask.value.trim()) {
-    await $fetch('/api/dorm/tasks', { method: 'POST', body: { taskName: newTask.value.trim() } })
-    newTask.value = ''
-    tasks.value = await $fetch('/api/dorm/tasks')
+    try {
+      await $fetch('/api/dorm/tasks', { method: 'POST', body: { taskName: newTask.value.trim() } })
+      newTask.value = ''
+      tasks.value = await $fetch('/api/dorm/tasks')
+      showToast('任务已添加 ✅', 'success')
+    } catch {
+      showToast('添加任务失败', 'error')
+    }
   }
 }
 async function removeTask(i: number) {
-  await $fetch('/api/dorm/tasks/delete', { method: 'POST', body: { taskId: tasks.value[i].id } })
-  tasks.value = await $fetch('/api/dorm/tasks')
+  try {
+    await $fetch('/api/dorm/tasks/delete', { method: 'POST', body: { taskId: tasks.value[i].id } })
+    tasks.value = await $fetch('/api/dorm/tasks')
+    showToast('任务已删除', 'success')
+  } catch {
+    showToast('删除任务失败', 'error')
+  }
 }
 async function saveConfig() {
-  await $fetch('/api/dorm/config', { method: 'PUT', body: { frequencyType: frequencyType.value, frequencyCount: frequencyCount.value } })
-  alert('配置已保存 ✅')
+  try {
+    await $fetch('/api/dorm/config', { method: 'PUT', body: { frequencyType: frequencyType.value, frequencyCount: frequencyCount.value } })
+    showToast('配置已保存 ✅', 'success')
+  } catch {
+    showToast('保存配置失败', 'error')
+  }
 }
 </script>
 
@@ -81,4 +108,17 @@ h3 { margin: 0 0 16px; font-size: 16px; color: #333; }
 .btn { width: 100%; padding: 10px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
 .btn-sm { padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 13px; }
 .btn-sm.danger { color: #dc2626; border-color: #dc2626; }
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.toast.success { background: #16a34a; color: #fff; }
+.toast.error { background: #ef4444; color: #fff; }
 </style>

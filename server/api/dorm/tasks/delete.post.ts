@@ -9,6 +9,7 @@ import { requireAuth } from '~/server/utils/auth'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
+  if (!user.isAdmin) throw createError({ statusCode: 403, message: '仅管理员可操作' })
   const dormId = user.dormId
   const body = await readBody(event)
   const { taskId } = body

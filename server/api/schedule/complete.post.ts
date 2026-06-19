@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const { db } = getDb()
   const { schedules } = await import('~/server/models/schema')
 
-  const [sched] = await db.select().from(schedules).where(eq(schedules.id, scheduleId)).limit(1)
+  const [sched] = await db.select().from(schedules).where(and(eq(schedules.id, scheduleId), eq(schedules.dormId, user.dormId))).limit(1)
 
   if (!sched) {
     throw createError({ statusCode: 404, message: '排班记录不存在' })

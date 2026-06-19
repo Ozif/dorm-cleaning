@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 import { schedulerService } from '~/server/services/scheduler'
@@ -34,6 +34,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '只能互换待完成状态的排班' })
   }
 
+  // 验证排班记录与请求成员匹配
+  if (schedA.memberId !== fromMemberA) {
+    throw createError({ statusCode: 400, message: '排班记录与请求成员不匹配' })
+  }
+
   // 验证请求方确实是被互换的成员之一
   if (fromMemberA !== user.memberId && toMemberB !== user.memberId) {
     throw createError({ statusCode: 403, message: '只能发起与自己相关的互换' })
@@ -47,13 +52,23 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: validation.reason || '互换无效' })
   }
 
-  // 写入互换日志
-  await db.insert(swapLogs).values({
-    scheduleIdA,
-    scheduleIdB,
-    fromMemberA,
-    toMemberB,
-    status: 'pending',
+  // 检查是否已有待审批的互换请求（相同排班对）+ 写入互换日志（原子操作）
+  await db.transaction(async (tx) => {
+    const [existingPending] = await tx.select().from(swapLogs).where(
+      and(eq(swapLogs.scheduleIdA, scheduleIdA), eq(swapLogs.scheduleIdB, scheduleIdB), eq(swapLogs.status, 'pending'))
+    ).limit(1)
+
+    if (existingPending) {
+      throw createError({ statusCode: 400, message: '已有待审批的互换请求' })
+    }
+
+    await tx.insert(swapLogs).values({
+      scheduleIdA,
+      scheduleIdB,
+      fromMemberA,
+      toMemberB,
+      status: 'pending',
+    })
   })
 
   return { success: true, message: '互换请求已发起，等待对方确认' }

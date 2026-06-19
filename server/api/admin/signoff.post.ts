@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   const scheduleList = await db
     .select()
     .from(schedules)
-    .where(eq(schedules.id, scheduleId))
+    .where(and(eq(schedules.id, scheduleId), eq(schedules.dormId, user.dormId)))
     .limit(1)
 
   if (scheduleList.length === 0) {
@@ -36,29 +36,31 @@ export default defineEventHandler(async (event) => {
 
   const schedule = scheduleList[0]
 
-  // 更新排班状态为 done
-  await db
-    .update(schedules)
-    .set({
-      status: 'done',
-      completedAt: new Date(),
-    })
-    .where(eq(schedules.id, scheduleId))
+  await db.transaction(async (tx) => {
+    // 更新排班状态为 done
+    await tx
+      .update(schedules)
+      .set({
+        status: 'done',
+        completedAt: new Date(),
+      })
+      .where(eq(schedules.id, scheduleId))
 
-  // 从 missed_logs 中移除（标记为 cleared）
-  await db
-    .update(missedLogs)
-    .set({
-      status: 'cleared',
-      clearedBy: user.memberId,
-      clearedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(missedLogs.scheduleId, scheduleId),
-        eq(missedLogs.status, 'missed'),
-      ),
-    )
+    // 从 missed_logs 中移除（标记为 cleared）
+    await tx
+      .update(missedLogs)
+      .set({
+        status: 'cleared',
+        clearedBy: user.memberId,
+        clearedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(missedLogs.scheduleId, scheduleId),
+          eq(missedLogs.status, 'missed'),
+        ),
+      )
+  })
 
   return {
     success: true,

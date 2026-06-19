@@ -86,7 +86,7 @@ onMounted(async () => {
     .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
     .slice(0, 5)
     .map(s => ({
-      date: s.scheduledDate.slice(5),
+      date: s.scheduledDate,
       name: s.memberName,
       done: s.status === 'done',
     }))

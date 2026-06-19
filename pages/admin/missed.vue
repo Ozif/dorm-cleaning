@@ -87,7 +87,7 @@ async function fetchMissed() {
     const data = await $fetch<MissedItem[]>('/api/schedule/missed')
     missedList.value = data
   } catch (err: any) {
-    // 如果 API 不存在，先尝试本地构造
+    showMsg('加载失败: ' + (err.message || '未知错误'), 'error')
     missedList.value = []
   } finally {
     loading.value = false

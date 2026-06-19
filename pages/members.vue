@@ -25,9 +25,25 @@
           <input v-model.number="m.weight" type="range" min="0.5" max="3.0" step="0.5" @change="updateWeight(m)" />
           <span class="weight-val">{{ m.weight }}</span>
         </div>
-        <button class="btn-sm danger" @click="removeMember(i)">移除</button>
+        <button class="btn-sm danger" @click="showConfirm = true; pendingRemoveIndex = i">移除</button>
       </div>
     </section>
+
+    <!-- Confirm dialog -->
+    <div v-if="showConfirm" class="confirm-overlay" @click.self="showConfirm = false">
+      <div class="confirm-dialog">
+        <p>确定要移除成员 {{ members[pendingRemoveIndex]?.name }} 吗？</p>
+        <div class="confirm-actions">
+          <button class="btn-sm" @click="showConfirm = false">取消</button>
+          <button class="btn-sm danger" @click="confirmRemove">确定移除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div v-if="toastMessage" class="toast" :class="toastType">
+      {{ toastMessage }}
+    </div>
   </div>
 </template>
 
@@ -35,6 +51,16 @@
 const newName = ref('')
 const newEmail = ref('')
 const members = ref<Array<{ id: number; name: string; email: string; weight: number; emailVerified: boolean }>>([])
+const showConfirm = ref(false)
+const pendingRemoveIndex = ref(0)
+const toastMessage = ref('')
+const toastType = ref<'success' | 'error'>('success')
+
+function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  toastMessage.value = msg
+  toastType.value = type
+  setTimeout(() => { toastMessage.value = '' }, 3000)
+}
 
 async function loadMembers() {
   const data = await $fetch('/api/members')
@@ -45,20 +71,35 @@ onMounted(loadMembers)
 
 async function addMember() {
   if (!newName.value || !newEmail.value) return
-  await $fetch('/api/members', { method: 'POST', body: { name: newName.value, email: newEmail.value } })
-  newName.value = ''
-  newEmail.value = ''
-  await loadMembers()
+  try {
+    await $fetch('/api/members', { method: 'POST', body: { name: newName.value, email: newEmail.value } })
+    newName.value = ''
+    newEmail.value = ''
+    await loadMembers()
+    showToast('成员添加成功 ✅', 'success')
+  } catch {
+    showToast('添加成员失败', 'error')
+  }
 }
 
-async function removeMember(i: number) {
-  if (!confirm(`确定要移除成员 ${members.value[i].name} 吗？`)) return
-  await $fetch('/api/members', { method: 'DELETE', params: { memberId: members.value[i].id } })
-  await loadMembers()
+async function confirmRemove() {
+  showConfirm.value = false
+  try {
+    await $fetch('/api/members', { method: 'DELETE', params: { memberId: members.value[pendingRemoveIndex.value].id } })
+    await loadMembers()
+    showToast('成员已移除 ✅', 'success')
+  } catch {
+    showToast('移除成员失败', 'error')
+  }
 }
 
 async function updateWeight(m: { id: number; weight: number }) {
-  await $fetch('/api/members', { method: 'PUT', body: { memberId: m.id, weight: m.weight } })
+  try {
+    await $fetch('/api/members', { method: 'PUT', body: { memberId: m.id, weight: m.weight } })
+    showToast('权重已更新 ✅', 'success')
+  } catch {
+    showToast('更新权重失败', 'error')
+  }
 }
 </script>
 
@@ -84,4 +125,21 @@ h3 { margin: 0 0 16px; font-size: 16px; color: #333; }
 .btn { width: 100%; padding: 10px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 15px; cursor: pointer; }
 .btn-sm { padding: 6px 12px; border-radius: 6px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 13px; }
 .btn-sm.danger { color: #dc2626; border-color: #dc2626; }
+.confirm-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center; z-index: 999;
+}
+.confirm-dialog {
+  background: #fff; border-radius: 12px; padding: 24px;
+  min-width: 280px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.confirm-dialog p { margin: 0 0 16px; font-size: 15px; color: #333; text-align: center; }
+.confirm-actions { display: flex; gap: 8px; justify-content: center; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  padding: 10px 20px; border-radius: 8px; font-size: 14px; z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.toast.success { background: #16a34a; color: #fff; }
+.toast.error { background: #ef4444; color: #fff; }
 </style>
