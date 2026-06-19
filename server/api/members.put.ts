@@ -1,4 +1,4 @@
-import { eq, and, gte } from 'drizzle-orm'
+import { eq, and, gt, or } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 import { schedulerService } from '~/server/services/scheduler'
@@ -48,11 +48,20 @@ export default defineEventHandler(async (event) => {
       .where(eq(members.dormId, dormId))
 
     if (memberList.length > 0) {
-      // 删除当前及之后的排班
+      // 清理该成员相关的换班请求
+      const { swapLogs } = await import('~/server/models/schema')
+      await db.delete(swapLogs).where(
+        or(
+          eq(swapLogs.fromMemberA, memberId),
+          eq(swapLogs.toMemberB, memberId),
+        ),
+      )
+
+      // 删除今天之后的排班（保留今天的已完成记录）
       await db.delete(schedules).where(
         and(
           eq(schedules.dormId, dormId),
-          gte(schedules.scheduledDate, todayStr),
+          gt(schedules.scheduledDate, todayStr),
         ),
       )
 

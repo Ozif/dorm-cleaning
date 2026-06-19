@@ -43,33 +43,30 @@ export class SchedulerService {
   ): ScheduleAssignment[] {
     if (memberList.length === 0) return []
 
-    // 计算总权重
     const totalWeight = memberList.reduce((sum, m) => sum + parseFloat(m.weight || '1.0'), 0)
     if (totalWeight <= 0) return []
 
-    // 按权重降序排列（高权重优先分配）
-    const sorted = [...memberList].sort(
-      (a, b) => parseFloat(b.weight || '1.0') - parseFloat(a.weight || '1.0')
-    )
-
-    // 构建结果
-    const assignments: ScheduleAssignment[] = []
-    const start = new Date(startDate)
-
-    // 记录每人已分配的次数
-    const assignedCount = new Map<number, number>()
-    sorted.forEach(m => assignedCount.set(m.id, 0))
-
-    // 记录上一个值班人（防止连续）
-    let lastMemberId = -1
-
-    // 根据 frequencyType + frequencyCount 计算需要排班的天索引
     const periodDays = frequencyType === 'monthly' ? 30 : 7
-    frequencyCount = Math.min(frequencyCount, periodDays)
+    const clampedFreq = Math.min(frequencyCount, periodDays)
+    const totalShifts = clampedFreq * Math.ceil(days / periodDays)
+
+    const activeMembers = memberList.filter(m => parseFloat(m.weight || '1.0') > 0)
+    if (activeMembers.length === 0) return []
+
+    // Calculate expected shifts proportional to weight
+    const expectedShifts = new Map<number, number>()
+    const assignedCount = new Map<number, number>()
+    for (const m of activeMembers) {
+      expectedShifts.set(m.id, totalShifts * (parseFloat(m.weight || '1.0') / totalWeight))
+      assignedCount.set(m.id, 0)
+    }
+
+    // Build sorted offsets (which days to assign)
+    const start = new Date(startDate)
     const assignmentDayOffsets = new Set<number>()
     for (let periodStart = 0; periodStart < days; periodStart += periodDays) {
-      for (let slot = 0; slot < frequencyCount; slot++) {
-        const offset = periodStart + Math.floor(slot * periodDays / frequencyCount)
+      for (let slot = 0; slot < clampedFreq; slot++) {
+        const offset = periodStart + Math.floor(slot * periodDays / clampedFreq)
         if (offset < days) {
           assignmentDayOffsets.add(offset)
         }
@@ -77,25 +74,34 @@ export class SchedulerService {
     }
     const sortedOffsets = [...assignmentDayOffsets].sort((a, b) => a - b)
 
+    const assignments: ScheduleAssignment[] = []
+    let lastMemberId = -1
+
     for (const offset of sortedOffsets) {
       const currentDate = new Date(start)
       currentDate.setDate(start.getDate() + offset)
       const dateStr = currentDate.toISOString().slice(0, 10)
       const weekNumber = this.getWeekNumber(currentDate)
 
-      // 从可用成员中选择
-      let selectedMember: Member | null = null
+      // Priority queue: sort by (assignedCount / weight) ratio ascending
+      activeMembers.sort((a, b) => {
+        const ratioA = (assignedCount.get(a.id) || 0) / parseFloat(a.weight || '1.0')
+        const ratioB = (assignedCount.get(b.id) || 0) / parseFloat(b.weight || '1.0')
+        if (ratioA !== ratioB) return ratioA - ratioB
+        return parseFloat(b.weight || '1.0') - parseFloat(a.weight || '1.0')
+      })
 
-      // 高权重优先 + 避免连续
-      for (const member of sorted) {
+      // Pick member with lowest ratio, skipping lastMemberId to avoid consecutive
+      let selectedMember: Member | null = null
+      for (const member of activeMembers) {
         if (member.id === lastMemberId) continue
         selectedMember = member
         break
       }
 
-      // 如果只有一个人，或者所有人都连续了，允许连续
-      if (!selectedMember && sorted.length > 0) {
-        selectedMember = sorted[0]
+      // If only one member or all would be consecutive, allow consecutive
+      if (!selectedMember && activeMembers.length > 0) {
+        selectedMember = activeMembers[0]
       }
 
       if (selectedMember) {
@@ -108,16 +114,6 @@ export class SchedulerService {
         assignedCount.set(selectedMember.id, (assignedCount.get(selectedMember.id) || 0) + 1)
         lastMemberId = selectedMember.id
       }
-
-      // 重新排序：已分配次数少的往前排
-      sorted.sort((a, b) => {
-        const countA = assignedCount.get(a.id) || 0
-        const countB = assignedCount.get(b.id) || 0
-        // 考虑权重：已分配次数 / 权重 比例低的优先
-        const ratioA = countA / parseFloat(a.weight || '1.0')
-        const ratioB = countB / parseFloat(b.weight || '1.0')
-        return ratioA - ratioB
-      })
     }
 
     return assignments

@@ -29,6 +29,13 @@ export default defineEventHandler(async (event) => {
   if (pendingRequest) {
     throw createError({ statusCode: 409, message: '该宿舍已有待审核的注册申请' })
   }
+
+  const [existingEmailPending] = await db.select().from(registrationRequests).where(
+    and(eq(registrationRequests.applicantEmail, applicant_email), eq(registrationRequests.status, 'pending')),
+  ).limit(1)
+  if (existingEmailPending) {
+    throw createError({ statusCode: 400, message: '该邮箱已有待审核的注册申请' })
+  }
   const crypto = await import('node:crypto')
 
   const approveToken = crypto.randomUUID()

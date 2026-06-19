@@ -49,7 +49,14 @@ export default defineEventHandler(async (event) => {
     return { success: true, message: '已拒绝互换请求' }
   }
 
+  // 收集邮件所需信息（事务外查询，避免事务内发邮件）
+  const { members } = await import('~/server/models/schema')
+  const [memberA] = await db.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
+  const [memberB] = await db.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
+
   // 批准：原子化执行所有读写操作
+  let schedDateA = ''
+  let schedDateB = ''
   await db.transaction(async (tx) => {
     const [schedA] = await tx.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdA)).limit(1)
     const [schedB] = await tx.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdB)).limit(1)
@@ -87,18 +94,15 @@ export default defineEventHandler(async (event) => {
       })
       .where(eq(swapLogs.id, swapId))
 
-    // 发送互换通知给双方
-    const { members } = await import('~/server/models/schema')
-    const [memberA] = await tx.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
-    const [memberB] = await tx.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
-
-    if (memberA && memberB) {
-      const dateA = schedA.scheduledDate
-      const dateB = schedB.scheduledDate
-      await emailService.sendNotification(memberA.email, '换班已批准', `您好，您与 ${memberB.name} 的换班请求已批准！\n您将承担 ${dateB} 的值班，${memberB.name} 将承担 ${dateA} 的值班。`)
-      await emailService.sendNotification(memberB.email, '换班已批准', `您好，${memberA.name} 与您的换班请求已批准！\n您将承担 ${dateA} 的值班，${memberA.name} 将承担 ${dateB} 的值班。`)
-    }
+    schedDateA = schedA.scheduledDate
+    schedDateB = schedB.scheduledDate
   })
+
+  // 事务完成后发送邮件通知
+  if (memberA && memberB) {
+    await emailService.sendNotification(memberA.email, '换班已批准', `您好，您与 ${memberB.name} 的换班请求已批准！\n您将承担 ${schedDateB} 的值班，${memberB.name} 将承担 ${schedDateA} 的值班。`)
+    await emailService.sendNotification(memberB.email, '换班已批准', `您好，${memberA.name} 与您的换班请求已批准！\n您将承担 ${schedDateA} 的值班，${memberA.name} 将承担 ${schedDateB} 的值班。`)
+  }
 
   return { success: true, message: '互换已批准 🎉' }
 })
