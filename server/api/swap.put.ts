@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
   await db.update(schedules)
     .set({
       memberId: schedB.memberId,
-      status: 'swapped',
+      status: 'pending',
       swappedWith: schedB.id,
     })
     .where(eq(schedules.id, schedA.id))
@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
   await db.update(schedules)
     .set({
       memberId: schedA.memberId,
-      status: 'swapped',
+      status: 'pending',
       swappedWith: schedA.id,
     })
     .where(eq(schedules.id, schedB.id))

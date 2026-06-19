@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/mysql2'
 import mysql from 'mysql2/promise'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { requireAuth } from '~/server/utils/auth'
 
 /**
@@ -24,8 +24,24 @@ export default defineEventHandler(async (event) => {
     database: process.env.DB_NAME || 'dorm_cleaning',
   })
   const db = drizzle(connection)
-  const { members } = await import('~/server/models/schema')
+  const { members, schedules } = await import('~/server/models/schema')
 
+  // 验证成员属于该宿舍
+  const [member] = await db.select().from(members).where(eq(members.id, memberId)).limit(1)
+  if (!member || member.dormId !== user.dormId) {
+    await connection.end()
+    throw createError({ statusCode: 403, message: '无权删除该成员' })
+  }
+
+  // 删除该成员的未来排班
+  await db.delete(schedules).where(
+    and(
+      eq(schedules.memberId, memberId),
+      eq(schedules.dormId, user.dormId),
+    ),
+  )
+
+  // 删除成员
   await db.delete(members).where(eq(members.id, memberId))
 
   await connection.end()

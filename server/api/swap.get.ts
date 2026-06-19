@@ -29,8 +29,29 @@ export default defineEventHandler(async (event) => {
     eq(swapLogs.toMemberB, user.memberId),
   )
 
-  // 管理员可以查看所有
-  // TODO: 检查管理员权限
+  // 管理员可以查看宿舍所有互换请求
+  const { schedules } = await import('~/server/models/schema')
+  if (user.isAdmin) {
+    const swapList = await db.select()
+      .from(swapLogs)
+      .innerJoin(schedules, eq(swapLogs.scheduleIdA, schedules.id))
+      .where(eq(schedules.dormId, user.dormId))
+      .orderBy(swapLogs.createdAt)
+
+    await connection.end()
+
+    return swapList.map(s => ({
+      id: s.swap_logs.id,
+      scheduleIdA: s.swap_logs.scheduleIdA,
+      scheduleIdB: s.swap_logs.scheduleIdB,
+      fromMemberA: s.swap_logs.fromMemberA,
+      toMemberB: s.swap_logs.toMemberB,
+      status: s.swap_logs.status,
+      swappedAt: s.swap_logs.swappedAt,
+      createdAt: s.swap_logs.createdAt,
+      canApprove: user.memberId === s.swap_logs.toMemberB && s.swap_logs.status === 'pending',
+    }))
+  }
 
   const swapList = await db.select()
     .from(swapLogs)

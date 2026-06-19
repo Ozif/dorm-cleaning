@@ -44,11 +44,6 @@ export default defineEventHandler(async (event) => {
     return { success: true, message: '已完成，无需重复打卡' }
   }
 
-  if (sched.status === 'swapped') {
-    await connection.end()
-    throw createError({ statusCode: 400, message: '该排班已被互换标记' })
-  }
-
   await db.update(schedules)
     .set({ status: 'done', completedAt: new Date() })
     .where(eq(schedules.id, scheduleId))

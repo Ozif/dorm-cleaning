@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/mysql2'
 import mysql from 'mysql2/promise'
+import { eq } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -18,7 +19,22 @@ export default defineEventHandler(async (event) => {
   })
   const db = drizzle(connection)
 
-  const { registrationRequests } = await import('~/server/models/schema')
+  const { dormConfig, registrationRequests } = await import('~/server/models/schema')
+
+  // 检查宿舍名是否已存在
+  const [existingDorm] = await db.select().from(dormConfig).where(eq(dormConfig.dormName, dorm_name)).limit(1)
+  if (existingDorm) {
+    await connection.end()
+    throw createError({ statusCode: 409, statusMessage: '宿舍名已存在，请更换名称' })
+  }
+
+  const [pendingRequest] = await db.select().from(registrationRequests).where(
+    eq(registrationRequests.dormName, dorm_name),
+  ).limit(1)
+  if (pendingRequest) {
+    await connection.end()
+    throw createError({ statusCode: 409, statusMessage: '宿舍名已存在，请更换名称' })
+  }
   const crypto = await import('node:crypto')
 
   const approveToken = crypto.randomUUID()

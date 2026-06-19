@@ -17,8 +17,9 @@ export default defineEventHandler(async (event) => {
 
   // 默认本周
   const now = new Date()
-  const startDate = start || new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 1).toISOString().slice(0, 10)
-  const endDate = end || new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay() + 7).toISOString().slice(0, 10)
+  const dayOfWeek = now.getDay() || 7  // Sunday=0 -> 7, Monday=1..Saturday=6
+  const startDate = start || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1).toISOString().slice(0, 10)
+  const endDate = end || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 7).toISOString().slice(0, 10)
 
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST || 'localhost',

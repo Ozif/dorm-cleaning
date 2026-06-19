@@ -115,7 +115,8 @@ const scheduleData = ref<Record<number, Record<string, string>>>({
 
 // 本周日期
 const today = new Date()
-const weekStart = ref(new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 1))
+const dayOfWeek = today.getDay() || 7  // Sunday=0 -> 7, Monday=1..Saturday=6
+const weekStart = ref(new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + 1))
 
 const weekDays = computed(() => {
   const days = []
