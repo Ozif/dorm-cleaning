@@ -29,8 +29,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: '只能打卡自己的排班' })
   }
 
+  // 检查是否为未来日期
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const schedDate = new Date(sched.scheduledDate)
+  if (schedDate > today) {
+    throw createError({ statusCode: 400, message: '未到值班日期，无法提前打卡' })
+  }
+
   if (sched.status === 'done') {
     return { success: true, message: '已完成，无需重复打卡' }
+  }
+
+  // 允许 missed 状态补打卡
+  if (sched.status !== 'pending' && sched.status !== 'missed') {
+    throw createError({ statusCode: 400, message: '该排班状态不允许打卡' })
   }
 
   await db.update(schedules)

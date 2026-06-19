@@ -1,10 +1,11 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, gte } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
+import { schedulerService } from '~/server/services/scheduler'
 
 /**
  * PUT /api/members
- * 更新成员权重
+ * 更新成员权重并重新生成未来排班
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
@@ -23,11 +24,59 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members } = await import('~/server/models/schema')
+  const { members, schedules, dormConfig } = await import('~/server/models/schema')
 
+  // 更新成员权重
   await db.update(members)
     .set({ weight: w.toString() })
     .where(and(eq(members.id, memberId), eq(members.dormId, dormId)))
 
-  return { success: true, message: '权重已更新' }
+  // 重新生成排班：删除未来排班后重新生成
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+
+  // 获取宿舍配置
+  const [config] = await db.select()
+    .from(dormConfig)
+    .where(eq(dormConfig.id, dormId))
+    .limit(1)
+
+  if (config) {
+    // 获取所有成员
+    const memberList = await db.select()
+      .from(members)
+      .where(eq(members.dormId, dormId))
+
+    if (memberList.length > 0) {
+      // 删除当前及之后的排班
+      await db.delete(schedules).where(
+        and(
+          eq(schedules.dormId, dormId),
+          gte(schedules.scheduledDate, todayStr),
+        ),
+      )
+
+      // 重新生成 30 天排班
+      const assignments = schedulerService.generateSchedule(
+        memberList,
+        todayStr,
+        30,
+        config.frequencyCount,
+        config.frequencyType,
+      )
+
+      if (assignments.length > 0) {
+        const newSchedules = assignments.map(a => ({
+          dormId,
+          memberId: a.memberId,
+          scheduledDate: a.scheduledDate,
+          weekNumber: a.weekNumber,
+          status: 'pending' as const,
+        }))
+        await db.insert(schedules).values(newSchedules)
+      }
+    }
+  }
+
+  return { success: true, message: '权重已更新，排班已重新生成' }
 })

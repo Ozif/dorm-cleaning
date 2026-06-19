@@ -49,21 +49,19 @@ export default defineEventHandler(async (event) => {
     return { success: true, message: '已拒绝互换请求' }
   }
 
-  // 批准：原子化更新两条排班记录
-  const [schedA] = await db.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdA)).limit(1)
-  const [schedB] = await db.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdB)).limit(1)
-
-  if (!schedA || !schedB) {
-    throw createError({ statusCode: 404, message: '排班记录不存在' })
-  }
-
-  // 验证排班属于同一个宿舍
-  if (schedA.dormId !== user.dormId || schedB.dormId !== user.dormId) {
-    throw createError({ statusCode: 403, message: '排班不属于您的宿舍' })
-  }
-
-  // 原子化执行所有写操作
+  // 批准：原子化执行所有读写操作
   await db.transaction(async (tx) => {
+    const [schedA] = await tx.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdA)).limit(1)
+    const [schedB] = await tx.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdB)).limit(1)
+
+    if (!schedA || !schedB) {
+      throw createError({ statusCode: 404, message: '排班记录不存在' })
+    }
+
+    // 验证排班属于同一个宿舍
+    if (schedA.dormId !== user.dormId || schedB.dormId !== user.dormId) {
+      throw createError({ statusCode: 403, message: '排班不属于您的宿舍' })
+    }
     // 交换 member_id
     await tx.update(schedules)
       .set({

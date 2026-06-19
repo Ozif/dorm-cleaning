@@ -19,9 +19,21 @@ export default defineEventHandler(async (event) => {
   }
 
   const req = requests[0]
-  if (req.status !== 'pending') {
-    return `<html><body><h2>❌ 该申请已被${req.status === 'approved' ? '通过' : '拒绝'}</h2></body></html>`
+
+  // 幂等性：已经通过则返回成功
+  if (req.status === 'approved') {
+    return `<html><body><h2>✅ 该申请已通过，无需重复审批</h2></body></html>`
   }
+  if (req.status !== 'pending') {
+    return `<html><body><h2>❌ 该申请已被拒绝</h2></body></html>`
+  }
+
+  // 24 小时过期检查
+  const createdAt = new Date(req.createdAt).getTime()
+  if (Date.now() - createdAt > 24 * 60 * 60 * 1000) {
+    throw createError({ statusCode: 400, message: '审批链接已超过24小时有效期，请重新申请' })
+  }
+
   if (new Date() > req.expiresAt!) {
     return `<html><body><h2>❌ 审批链接已过期（有效期7天）</h2></body></html>`
   }

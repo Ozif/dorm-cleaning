@@ -7,7 +7,10 @@ const ALGORITHM = 'aes-256-cbc'
  * 生产环境请使用安全的随机密钥
  */
 function getKey(): Buffer {
-  const secret = process.env.NUXT_SESSION_PASSWORD || 'dorm-cleaning-default-secret-key-change-in-production'
+  const secret = process.env.NUXT_SESSION_PASSWORD
+  if (!secret) {
+    throw new Error('NUXT_SESSION_PASSWORD 环境变量未设置，请设置一个安全的随机密钥')
+  }
   return createHash('sha256').update(secret).digest()
 }
 

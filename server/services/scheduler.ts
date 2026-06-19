@@ -65,6 +65,7 @@ export class SchedulerService {
 
     // 根据 frequencyType + frequencyCount 计算需要排班的天索引
     const periodDays = frequencyType === 'monthly' ? 30 : 7
+    frequencyCount = Math.min(frequencyCount, periodDays)
     const assignmentDayOffsets = new Set<number>()
     for (let periodStart = 0; periodStart < days; periodStart += periodDays) {
       for (let slot = 0; slot < frequencyCount; slot++) {
@@ -120,39 +121,6 @@ export class SchedulerService {
     }
 
     return assignments
-  }
-
-  /**
-   * 按比例计算每人应值班次数
-   */
-  calculateExpectedCounts(memberList: Member[], totalShifts: number): Map<number, number> {
-    const totalWeight = memberList.reduce((s, m) => s + parseFloat(m.weight || '1.0'), 0)
-    const result = new Map<number, number>()
-
-    // 先按 floor 分配
-    let remaining = totalShifts
-    memberList.forEach(m => {
-      const expected = totalShifts * parseFloat(m.weight || '1.0') / totalWeight
-      const floor = Math.floor(expected)
-      result.set(m.id, floor)
-      remaining -= floor
-    })
-
-    // 剩余次数按小数部分从大到小分配
-    const sorted = [...memberList].sort(
-      (a, b) => {
-        const fracA = (totalShifts * parseFloat(a.weight || '1.0') / totalWeight) - Math.floor(totalShifts * parseFloat(a.weight || '1.0') / totalWeight)
-        const fracB = (totalShifts * parseFloat(b.weight || '1.0') / totalWeight) - Math.floor(totalShifts * parseFloat(b.weight || '1.0') / totalWeight)
-        return fracB - fracA
-      }
-    )
-
-    for (let i = 0; i < remaining && i < sorted.length; i++) {
-      const id = sorted[i].id
-      result.set(id, (result.get(id) || 0) + 1)
-    }
-
-    return result
   }
 
   /**

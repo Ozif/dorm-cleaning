@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, or } from 'drizzle-orm'
 import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, schedules } = await import('~/server/models/schema')
+  const { members, schedules, missedLogs, swapLogs, emailLogs } = await import('~/server/models/schema')
 
   // 验证成员属于该宿舍
   const [member] = await db.select().from(members).where(eq(members.id, memberId)).limit(1)
@@ -25,16 +25,32 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: '无权删除该成员' })
   }
 
-  // 删除该成员的未来排班
-  await db.delete(schedules).where(
-    and(
-      eq(schedules.memberId, memberId),
-      eq(schedules.dormId, user.dormId),
-    ),
-  )
+  await db.transaction(async (tx) => {
+    // 删除关联的排班
+    await tx.delete(schedules).where(
+      and(
+        eq(schedules.memberId, memberId),
+        eq(schedules.dormId, user.dormId),
+      ),
+    )
 
-  // 删除成员
-  await db.delete(members).where(eq(members.id, memberId))
+    // 删除关联的漏打卡记录
+    await tx.delete(missedLogs).where(eq(missedLogs.memberId, memberId))
+
+    // 删除关联的换班请求
+    await tx.delete(swapLogs).where(
+      or(
+        eq(swapLogs.fromMemberA, memberId),
+        eq(swapLogs.toMemberB, memberId),
+      ),
+    )
+
+    // 删除关联的邮件记录
+    await tx.delete(emailLogs).where(eq(emailLogs.memberId, memberId))
+
+    // 删除成员
+    await tx.delete(members).where(eq(members.id, memberId))
+  })
 
   return { success: true, message: '成员已移除' }
 })
