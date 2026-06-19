@@ -31,16 +31,29 @@
 <script setup lang="ts">
 const filter = ref<'all' | 'done' | 'missed'>('all')
 
-const records = ref([
-  { id: 1, date: '06-18', member: '张三', status: 'done', completedAt: '20:15' },
-  { id: 2, date: '06-17', member: '李四', status: 'done', completedAt: '19:30' },
-  { id: 3, date: '06-16', member: '王五', status: 'missed', completedAt: null },
-  { id: 4, date: '06-15', member: '张三', status: 'done', completedAt: '20:00' },
-  { id: 5, date: '06-14', member: '李四', status: 'done', completedAt: '21:10' },
-  { id: 6, date: '06-13', member: '王五', status: 'missed', completedAt: null },
-  { id: 7, date: '06-12', member: '张三', status: 'done', completedAt: '19:45' },
-  { id: 8, date: '06-11', member: '李四', status: 'missed', completedAt: null },
-])
+interface Record {
+  id: number
+  date: string
+  member: string
+  status: 'done' | 'missed'
+  completedAt: string | null
+}
+
+const records = ref<Record[]>([])
+
+onMounted(async () => {
+  const data: Array<{ id: number; scheduledDate: string; memberName: string; status: string; completedAt: string | null }> = await $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } })
+  records.value = data
+    .filter(s => s.status === 'done' || s.status === 'missed')
+    .map(s => ({
+      id: s.id,
+      date: s.scheduledDate.slice(5),
+      member: s.memberName,
+      status: s.status as 'done' | 'missed',
+      completedAt: s.completedAt ? s.completedAt.slice(11, 16) : null,
+    }))
+    .sort((a, b) => b.id - a.id)
+})
 
 const filteredRecords = computed(() => {
   if (filter.value === 'all') return records.value

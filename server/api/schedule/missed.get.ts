@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
-import { eq, desc, isNull } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
 /**
@@ -13,14 +12,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, message: '仅管理员可查看' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { missedLogs, members } = await import('~/server/models/schema')
 
   // 联表查询
@@ -40,6 +32,5 @@ export default defineEventHandler(async (event) => {
     .orderBy(desc(missedLogs.missedDate))
     .limit(100)
 
-  await connection.end()
   return logs
 })

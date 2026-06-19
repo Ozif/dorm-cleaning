@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq, and, gte, sql } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 
 /**
  * POST /api/auth/send-code
@@ -15,14 +14,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '请填写邮箱' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { members, emailLogs } = await import('~/server/models/schema')
 
   // 查找该邮箱对应的宿舍管理员
@@ -32,7 +24,6 @@ export default defineEventHandler(async (event) => {
     .limit(1)
 
   if (memberList.length === 0) {
-    await connection.end()
     throw createError({ statusCode: 404, message: '该邮箱未注册为宿舍管理员' })
   }
 
@@ -51,7 +42,6 @@ export default defineEventHandler(async (event) => {
     .limit(1)
 
   if (recentLogs.length > 0) {
-    await connection.end()
     throw createError({ statusCode: 429, message: '请60秒后再获取验证码' })
   }
 
@@ -67,7 +57,6 @@ export default defineEventHandler(async (event) => {
     )
 
   if (Number(hourlyLogs[0]?.count || 0) >= 5) {
-    await connection.end()
     throw createError({ statusCode: 429, message: '发送太频繁，请1小时后再试' })
   }
 
@@ -83,7 +72,11 @@ export default defineEventHandler(async (event) => {
     })
     .where(eq(members.id, member.id))
 
-  // 记录邮件日志
+  // 先发送验证码邮件
+  const { emailService } = await import('~/server/utils/email')
+  await emailService.sendVerifyCode(email, code)
+
+  // 发送成功后记录日志
   await db.insert(emailLogs).values({
     dormId: member.dormId!,
     memberId: member.id,
@@ -94,10 +87,5 @@ export default defineEventHandler(async (event) => {
     status: 'success',
   })
 
-  // 发送验证码邮件
-  const { emailService } = await import('~/server/utils/email')
-  await emailService.sendVerifyCode(email, code)
-
-  await connection.end()
   return { success: true, message: '验证码已发送' }
 })

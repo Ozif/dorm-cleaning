@@ -35,7 +35,6 @@
             @click="openAction(member, day)"
           >
             <span v-if="getSchedule(member.id, day.date) === 'done'" class="icon-done">✅</span>
-            <span v-else-if="getSchedule(member.id, day.date) === 'swapped'" class="icon-swap">🔄</span>
             <span v-else-if="getSchedule(member.id, day.date) === 'missed'" class="icon-missed">❌</span>
             <span v-else-if="getSchedule(member.id, day.date) === 'assigned'" class="icon-assigned">●</span>
           </div>
@@ -99,23 +98,12 @@ const generateStart = ref('')
 const generateDays = ref(7)
 const selectedDay = ref<{date: string; memberName: string; memberId: number} | null>(null)
 
-// Mock 成员
-const members = ref([
-  { id: 1, name: '张三' },
-  { id: 2, name: '李四' },
-  { id: 3, name: '王五' },
-])
-
-// 排班数据 { memberId: { date: status } }
-const scheduleData = ref<Record<number, Record<string, string>>>({
-  1: { '06-22': 'assigned', '06-25': 'assigned' },
-  2: { '06-23': 'assigned', '06-26': 'assigned' },
-  3: { '06-24': 'done', '06-27': 'rest' },
-})
+const members = ref<Array<{ id: number; name: string }>>([])
+const scheduleMap = ref<Record<number, Record<string, string>>>({})
 
 // 本周日期
 const today = new Date()
-const dayOfWeek = today.getDay() || 7  // Sunday=0 -> 7, Monday=1..Saturday=6
+const dayOfWeek = today.getDay() || 7
 const weekStart = ref(new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + 1))
 
 const weekDays = computed(() => {
@@ -124,13 +112,16 @@ const weekDays = computed(() => {
     const d = new Date(weekStart.value)
     d.setDate(weekStart.value.getDate() + i)
     days.push({
-      date: `${d.getMonth()+1}-${d.getDate()}`,
+      date: d.toISOString().slice(0, 10),
       day: ['周一','周二','周三','周四','周五','周六','周日'][i],
       full: d.toISOString().slice(0, 10),
     })
   }
   return days
 })
+
+const weekStartStr = computed(() => weekDays.value[0]?.full || '')
+const weekEndStr = computed(() => weekDays.value[6]?.full || '')
 
 const periodLabel = computed(() => {
   if (view.value === 'week') {
@@ -155,21 +146,45 @@ const monthDays = computed(() => {
     days.push({ dayNum: d.getDate(), currentMonth: false, schedules: [] })
   }
   for (let i = 1; i <= lastDay.getDate(); i++) {
-    days.push({ dayNum: i, currentMonth: true, schedules: [
-      { memberId: 1, name: '张三', status: 'assigned' },
-    ]})
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
+    const scheds: Array<{ memberId: number; name: string; status: string }> = []
+    for (const [memberIdStr, dates] of Object.entries(scheduleMap.value)) {
+      const status = dates[dateStr]
+      if (status) {
+        const m = members.value.find(mm => mm.id === Number(memberIdStr))
+        scheds.push({ memberId: Number(memberIdStr), name: m?.name || '未知', status })
+      }
+    }
+    days.push({ dayNum: i, currentMonth: true, schedules: scheds })
   }
   return days
 })
 
+async function loadData() {
+  const [memberData, scheduleData] = await Promise.all([
+    $fetch('/api/members'),
+    $fetch('/api/schedule', { params: { start: weekStartStr.value, end: weekEndStr.value } }),
+  ])
+  members.value = memberData.map((m: any) => ({ id: m.id, name: m.name }))
+  const map: Record<number, Record<string, string>> = {}
+  for (const s of scheduleData as Array<{ memberId: number; scheduledDate: string; status: string }>) {
+    if (!map[s.memberId]) map[s.memberId] = {}
+    map[s.memberId][s.scheduledDate] = s.status
+  }
+  scheduleMap.value = map
+}
+
+onMounted(loadData)
+watch(weekStart, loadData)
+
 function getSchedule(memberId: number, date: string): string {
-  return scheduleData.value[memberId]?.[date] || ''
+  return scheduleMap.value[memberId]?.[date] || ''
 }
 
 function getCellClass(memberId: number, date: string): string {
   const s = getSchedule(memberId, date)
   if (s === 'done') return 'cell-done'
-  if (s === 'assigned') return 'cell-assigned'
+  if (s === 'assigned' || s === 'pending') return 'cell-assigned'
   if (s === 'rest') return 'cell-rest'
   return ''
 }
@@ -191,9 +206,14 @@ function nextPeriod() {
   weekStart.value = new Date(weekStart.value)
 }
 
-function markDone(day: {memberId: number; date: string}) {
-  if (!scheduleData.value[day.memberId]) scheduleData.value[day.memberId] = {}
-  scheduleData.value[day.memberId][day.date] = 'done'
+async function markDone(day: {memberId: number; date: string}) {
+  // Find the schedule record id from the loaded data
+  const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
+  const sched = scheduleData.find(s => s.memberId === day.memberId)
+  if (sched) {
+    await $fetch('/api/schedule/complete', { method: 'POST', body: { scheduleId: sched.id } })
+    await loadData()
+  }
   selectedDay.value = null
 }
 

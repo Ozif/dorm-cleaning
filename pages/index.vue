@@ -36,22 +36,62 @@
 
 <script setup lang="ts">
 const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
-
-const todayMember = ref('张三')
+const todayStr = new Date().toISOString().slice(0, 10)
 
 const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-const weekSchedule = ref(weekdays.map((name, i) => ({
-  name,
-  member: ['张三', '李四', '王五', '张三', '李四', '', '休息'][i] || '待排班'
-})))
 
-const recentRecords = ref([
-  { date: '06-18', name: '张三', done: true },
-  { date: '06-17', name: '李四', done: true },
-  { date: '06-16', name: '王五', done: false },
-  { date: '06-15', name: '张三', done: true },
-  { date: '06-14', name: '李四', done: true },
-])
+const todayMember = ref('')
+const weekSchedule = ref<Array<{ name: string; member: string }>>([])
+const recentRecords = ref<Array<{ date: string; name: string; done: boolean }>>([])
+
+onMounted(async () => {
+  // 计算本周起止日期
+  const now = new Date()
+  const dow = now.getDay() || 7
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow + 1)
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+  const startStr = weekStart.toISOString().slice(0, 10)
+  const endStr = weekEnd.toISOString().slice(0, 10)
+
+  // 取更早的日期用于最近记录
+  const pastStart = new Date(now)
+  pastStart.setDate(pastStart.getDate() - 14)
+  const pastStartStr = pastStart.toISOString().slice(0, 10)
+
+  const [scheduleData] = await Promise.all([
+    $fetch('/api/schedule', { params: { start: pastStartStr, end: endStr } }),
+  ])
+
+  // 今日打扫
+  const todayEntries = (scheduleData as Array<{ memberName: string; scheduledDate: string }>).filter(s => s.scheduledDate === todayStr)
+  todayMember.value = todayEntries.length > 0 ? todayEntries[0].memberName : ''
+
+  // 本周排班
+  const weekSched: Array<{ name: string; member: string }> = weekdays.map((name) => ({ name, member: '' }))
+  for (const s of scheduleData as Array<{ memberName: string; scheduledDate: string }>) {
+    if (s.scheduledDate >= startStr && s.scheduledDate <= endStr) {
+      const dayIdx = new Date(s.scheduledDate).getDay() || 7
+      if (dayIdx >= 1 && dayIdx <= 7) {
+        weekSched[dayIdx - 1].member = s.memberName
+      }
+    }
+  }
+  weekSchedule.value = weekSched
+
+  // 最近记录（取最近完成/漏扫）
+  const allRecords = scheduleData as Array<{ scheduledDate: string; memberName: string; status: string }>
+  const recents = allRecords
+    .filter(s => s.scheduledDate < todayStr && (s.status === 'done' || s.status === 'missed'))
+    .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate))
+    .slice(0, 5)
+    .map(s => ({
+      date: s.scheduledDate.slice(5),
+      name: s.memberName,
+      done: s.status === 'done',
+    }))
+  recentRecords.value = recents
+})
 </script>
 
 <style scoped>

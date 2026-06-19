@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
 /**
@@ -10,6 +9,7 @@ import { requireAuth } from '~/server/utils/auth'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
+  const dormId = user.dormId
   const body = await readBody(event)
   const { taskId } = body
 
@@ -17,19 +17,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '缺少任务 ID' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { cleaningTasks } = await import('~/server/models/schema')
 
   await db.delete(cleaningTasks)
-    .where(eq(cleaningTasks.id, taskId))
+    .where(and(eq(cleaningTasks.id, taskId), eq(cleaningTasks.dormId, dormId)))
 
-  await connection.end()
   return { success: true, message: '任务已删除' }
 })

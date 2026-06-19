@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
 /**
@@ -21,32 +20,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '操作类型为 approve 或 reject' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { swapLogs, schedules } = await import('~/server/models/schema')
 
   // 获取互换请求
   const [swapLog] = await db.select().from(swapLogs).where(eq(swapLogs.id, swapId)).limit(1)
 
   if (!swapLog) {
-    await connection.end()
     throw createError({ statusCode: 404, message: '互换请求不存在' })
   }
 
   if (swapLog.status !== 'pending') {
-    await connection.end()
     throw createError({ statusCode: 400, message: '该互换请求已处理' })
   }
 
   // 验证操作人是被请求方
   if (user.memberId !== swapLog.toMemberB) {
-    await connection.end()
     throw createError({ statusCode: 403, message: '只有被请求方才能审批' })
   }
 
@@ -56,7 +45,6 @@ export default defineEventHandler(async (event) => {
       .set({ status: 'rejected' })
       .where(eq(swapLogs.id, swapId))
 
-    await connection.end()
     return { success: true, message: '已拒绝互换请求' }
   }
 
@@ -65,7 +53,6 @@ export default defineEventHandler(async (event) => {
   const [schedB] = await db.select().from(schedules).where(eq(schedules.id, swapLog.scheduleIdB)).limit(1)
 
   if (!schedA || !schedB) {
-    await connection.end()
     throw createError({ statusCode: 404, message: '排班记录不存在' })
   }
 
@@ -94,6 +81,5 @@ export default defineEventHandler(async (event) => {
     })
     .where(eq(swapLogs.id, swapId))
 
-  await connection.end()
   return { success: true, message: '互换已批准 🎉' }
 })

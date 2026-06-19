@@ -1,19 +1,11 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
   const token = getRouterParam(event, 'token')
   if (!token) throw createError({ statusCode: 400, message: '无效的审批链接' })
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
 
   const { registrationRequests, dormConfig, members } = await import('~/server/models/schema')
 
@@ -64,8 +56,6 @@ export default defineEventHandler(async (event) => {
   await db.update(dormConfig)
     .set({ adminMemberId: memberId })
     .where(eq(dormConfig.id, dormId))
-
-  await connection.end()
 
   const { emailService } = await import('~/server/utils/email')
   await emailService.sendNotification(

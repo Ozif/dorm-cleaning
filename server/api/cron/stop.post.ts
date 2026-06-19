@@ -7,6 +7,7 @@ import { requireAuth } from '~/server/utils/auth'
  */
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event)
+  if (!user.isAdmin) throw createError({ statusCode: 403, message: '仅管理员可启停定时任务' })
   if (!cronService.isRunning) {
     return { success: true, message: '定时任务未在运行' }
   }

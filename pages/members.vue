@@ -12,17 +12,17 @@
     <section class="card">
       <h3>成员列表</h3>
       <div v-if="members.length === 0" class="empty">暂无成员</div>
-      <div v-for="(m, i) in members" :key="i" class="member-card">
+      <div v-for="(m, i) in members" :key="m.id" class="member-card">
         <div class="member-info">
           <div class="member-name">{{ m.name }}</div>
           <div class="member-email">{{ m.email }}</div>
-          <span class="badge" :class="m.verified ? 'verified' : 'pending'">
-            {{ m.verified ? '已验证' : '未验证' }}
+          <span class="badge" :class="m.emailVerified ? 'verified' : 'pending'">
+            {{ m.emailVerified ? '已验证' : '未验证' }}
           </span>
         </div>
         <div class="member-weight">
           <label>权重</label>
-          <input v-model.number="m.weight" type="range" min="0.5" max="3.0" step="0.5" />
+          <input v-model.number="m.weight" type="range" min="0.5" max="3.0" step="0.5" @change="updateWeight(m)" />
           <span class="weight-val">{{ m.weight }}</span>
         </div>
         <button class="btn-sm danger" @click="removeMember(i)">移除</button>
@@ -34,26 +34,30 @@
 <script setup lang="ts">
 const newName = ref('')
 const newEmail = ref('')
-const members = ref([
-  { name: '张三', email: 'zhangsan@qq.com', weight: 1.0, verified: true },
-  { name: '李四', email: 'lisi@qq.com', weight: 1.5, verified: false },
-  { name: '王五', email: 'wangwu@qq.com', weight: 2.0, verified: false },
-])
+const members = ref<Array<{ id: number; name: string; email: string; weight: number; emailVerified: boolean }>>([])
 
-function addMember() {
-  if (newName.value && newEmail.value) {
-    members.value.push({
-      name: newName.value,
-      email: newEmail.value,
-      weight: 1.0,
-      verified: false,
-    })
-    newName.value = ''
-    newEmail.value = ''
-  }
+async function loadMembers() {
+  const data = await $fetch('/api/members')
+  members.value = data
 }
-function removeMember(i: number) {
-  members.value.splice(i, 1)
+
+onMounted(loadMembers)
+
+async function addMember() {
+  if (!newName.value || !newEmail.value) return
+  await $fetch('/api/members', { method: 'POST', body: { name: newName.value, email: newEmail.value } })
+  newName.value = ''
+  newEmail.value = ''
+  await loadMembers()
+}
+
+async function removeMember(i: number) {
+  await $fetch('/api/members', { method: 'DELETE', params: { memberId: members.value[i].id } })
+  await loadMembers()
+}
+
+async function updateWeight(m: { id: number; weight: number }) {
+  await $fetch('/api/members', { method: 'PUT', body: { memberId: m.id, weight: m.weight } })
 }
 </script>
 

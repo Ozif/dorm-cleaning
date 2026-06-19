@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
-import { eq, and, gt } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 
 /**
  * POST /api/auth/login
@@ -19,14 +18,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '验证码格式错误' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { members } = await import('~/server/models/schema')
 
   // 查找管理员
@@ -36,7 +28,6 @@ export default defineEventHandler(async (event) => {
     .limit(1)
 
   if (memberList.length === 0) {
-    await connection.end()
     throw createError({ statusCode: 404, message: '该邮箱未注册' })
   }
 
@@ -44,12 +35,10 @@ export default defineEventHandler(async (event) => {
 
   // 验证验证码
   if (member.loginCode !== code) {
-    await connection.end()
     throw createError({ statusCode: 401, message: '验证码错误' })
   }
 
   if (!member.loginCodeExpires || new Date() > member.loginCodeExpires) {
-    await connection.end()
     throw createError({ statusCode: 401, message: '验证码已过期' })
   }
 
@@ -60,8 +49,6 @@ export default defineEventHandler(async (event) => {
       loginCodeExpires: null,
     })
     .where(eq(members.id, member.id))
-
-  await connection.end()
 
   // 设置 session（使用 Nuxt 内置的 seal/data 机制，或简单存 cookie）
   const sessionData = {

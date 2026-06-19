@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 
 /**
@@ -21,14 +20,7 @@ export default defineEventHandler(async (event) => {
   const startDate = start || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1).toISOString().slice(0, 10)
   const endDate = end || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 7).toISOString().slice(0, 10)
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { schedules, members } = await import('~/server/models/schema')
 
   const scheduleList = await db.select()
@@ -48,8 +40,6 @@ export default defineEventHandler(async (event) => {
     : []
 
   const memberMap = new Map(memberList.map(m => [m.id, m]))
-
-  await connection.end()
 
   return scheduleList.map(s => ({
     id: s.id,

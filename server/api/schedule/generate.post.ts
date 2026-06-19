@@ -1,6 +1,5 @@
-import { drizzle } from 'drizzle-orm/mysql2'
-import mysql from 'mysql2/promise'
 import { eq, and } from 'drizzle-orm'
+import { getDb } from '~/server/utils/db'
 import { requireAuth } from '~/server/utils/auth'
 import { schedulerService } from '~/server/services/scheduler'
 
@@ -19,14 +18,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '请指定开始日期和天数' })
   }
 
-  const connection = await mysql.createConnection({
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
-  })
-  const db = drizzle(connection)
+  const { db } = getDb()
   const { members, schedules, dormConfig } = await import('~/server/models/schema')
 
   // 获取宿舍配置
@@ -36,7 +28,6 @@ export default defineEventHandler(async (event) => {
     .limit(1)
 
   if (configList.length === 0) {
-    await connection.end()
     throw createError({ statusCode: 404, message: '宿舍未配置' })
   }
 
@@ -46,7 +37,6 @@ export default defineEventHandler(async (event) => {
     .where(eq(members.dormId, dormId))
 
   if (memberList.length === 0) {
-    await connection.end()
     throw createError({ statusCode: 400, message: '宿舍暂无成员，请先添加成员' })
   }
 
@@ -54,7 +44,6 @@ export default defineEventHandler(async (event) => {
   const assignments = schedulerService.generateSchedule(memberList, startDate, days)
 
   if (assignments.length === 0) {
-    await connection.end()
     throw createError({ statusCode: 500, message: '排班生成失败' })
   }
 
@@ -76,8 +65,6 @@ export default defineEventHandler(async (event) => {
       })
     }
   }
-
-  await connection.end()
 
   return {
     success: true,

@@ -46,49 +46,76 @@
 <script setup lang="ts">
 const tab = ref<'pending' | 'history'>('pending')
 
-const pendingSwaps = ref([
-  {
-    id: 1,
-    fromName: '李四',
-    toName: '张三',
-    dateA: '06-23',
-    dateB: '06-25',
-    canApprove: true,
-  },
-  {
-    id: 2,
-    fromName: '王五',
-    toName: '李四',
-    dateA: '06-24',
-    dateB: '06-26',
-    canApprove: false,
-  },
-])
-
-const swapHistory = ref([
-  {
-    id: 3,
-    fromName: '张三',
-    toName: '李四',
-    dateA: '06-20',
-    dateB: '06-21',
-    status: 'approved',
-  },
-  {
-    id: 4,
-    fromName: '王五',
-    toName: '张三',
-    dateA: '06-18',
-    dateB: '06-19',
-    status: 'rejected',
-  },
-])
-
-function approveSwap(id: number) {
-  alert(`批准互换 #${id}`)
+interface SwapItem {
+  id: number
+  fromName: string
+  toName: string
+  dateA: string
+  dateB: string
+  canApprove?: boolean
+  status?: string
 }
-function rejectSwap(id: number) {
-  alert(`拒绝互换 #${id}`)
+
+const pendingSwaps = ref<SwapItem[]>([])
+const swapHistory = ref<SwapItem[]>([])
+
+onMounted(async () => {
+  const [swapData, memberData, scheduleData] = await Promise.all([
+    $fetch('/api/swap'),
+    $fetch('/api/members'),
+    $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } }),
+  ])
+
+  const memberMap = new Map((memberData as Array<{ id: number; name: string }>).map(m => [m.id, m.name]))
+  const scheduleMap = new Map((scheduleData as Array<{ id: number; scheduledDate: string }>).map(s => [s.id, s.scheduledDate]))
+
+  const allItems: SwapItem[] = (swapData as Array<{
+    id: number
+    fromMemberA: number
+    toMemberB: number
+    scheduleIdA: number
+    scheduleIdB: number
+    status: string
+    canApprove?: boolean
+  }>).map(s => ({
+    id: s.id,
+    fromName: memberMap.get(s.fromMemberA) || '未知',
+    toName: memberMap.get(s.toMemberB) || '未知',
+    dateA: (scheduleMap.get(s.scheduleIdA) || '').slice(5),
+    dateB: (scheduleMap.get(s.scheduleIdB) || '').slice(5),
+    canApprove: s.canApprove,
+    status: s.status,
+  }))
+
+  pendingSwaps.value = allItems.filter(s => s.status === 'pending')
+  swapHistory.value = allItems.filter(s => s.status !== 'pending')
+})
+
+async function approveSwap(id: number) {
+  await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'approve' } })
+  tab.value = 'history'
+  // Refresh data
+  const swapData = await $fetch('/api/swap')
+  const memberData = await $fetch('/api/members')
+  const scheduleData = await $fetch('/api/schedule', { params: { start: '2000-01-01', end: '2099-12-31' } })
+  const memberMap = new Map((memberData as Array<{ id: number; name: string }>).map(m => [m.id, m.name]))
+  const scheduleMap = new Map((scheduleData as Array<{ id: number; scheduledDate: string }>).map(s => [s.id, s.scheduledDate]))
+  const allItems: SwapItem[] = (swapData as Array<any>).map(s => ({
+    id: s.id,
+    fromName: memberMap.get(s.fromMemberA) || '未知',
+    toName: memberMap.get(s.toMemberB) || '未知',
+    dateA: (scheduleMap.get(s.scheduleIdA) || '').slice(5),
+    dateB: (scheduleMap.get(s.scheduleIdB) || '').slice(5),
+    canApprove: s.canApprove,
+    status: s.status,
+  }))
+  pendingSwaps.value = allItems.filter(s => s.status === 'pending')
+  swapHistory.value = allItems.filter(s => s.status !== 'pending')
+}
+
+async function rejectSwap(id: number) {
+  await $fetch('/api/swap', { method: 'PUT', body: { swapId: id, action: 'reject' } })
+  pendingSwaps.value = pendingSwaps.value.filter(s => s.id !== id)
 }
 </script>
 
