@@ -292,7 +292,9 @@
 DB_HOST=localhost
 DB_PORT=3306
 DB_USER=root
-DB_PASSWORD=*** ========== QQ邮箱 SMTP 配置 ==========
+DB_PASSWORD=***
+
+# ========== QQ邮箱 SMTP 配置 ==========
 SMTP_HOST=smtp.qq.com
 SMTP_PORT=465
 SMTP_USER=你的QQ邮箱@qq.com

@@ -1,5 +1,5 @@
 import type { InferSelectModel } from 'drizzle-orm'
-import type { members, schedules } from '~/server/models/schema'
+import type { members, schedules } from '~~/server/models/schema'
 
 type Member = InferSelectModel<typeof members>
 type Schedule = InferSelectModel<typeof schedules>
@@ -101,7 +101,7 @@ export class SchedulerService {
 
       // If only one member or all would be consecutive, allow consecutive
       if (!selectedMember && activeMembers.length > 0) {
-        selectedMember = activeMembers[0]
+        selectedMember = activeMembers[0] ?? null
       }
 
       if (selectedMember) {

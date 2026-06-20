@@ -1,6 +1,6 @@
-import { or, eq, and } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { or, eq, and, type SQL } from 'drizzle-orm'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * GET /api/swap
@@ -13,25 +13,26 @@ export default defineEventHandler(async (event) => {
   const statusFilter = query.status as string | undefined
 
   const { db } = getDb()
-  const { swapLogs } = await import('~/server/models/schema')
+  const { swapLogs } = await import('~~/server/models/schema')
 
   // 查询与当前用户相关的互换请求（作为发起方或接收方）
-  let conditions = or(
+  const relatedUserCondition = or(
     eq(swapLogs.fromMemberA, user.memberId),
     eq(swapLogs.toMemberB, user.memberId),
   )
-  if (statusFilter) conditions = and(conditions, eq(swapLogs.status, statusFilter))
+  const userConditions: SQL[] = relatedUserCondition ? [relatedUserCondition] : []
+  if (statusFilter) userConditions.push(eq(swapLogs.status, statusFilter))
 
   // 管理员可以查看宿舍所有互换请求
-  const { schedules } = await import('~/server/models/schema')
+  const { schedules } = await import('~~/server/models/schema')
   if (user.isAdmin) {
-    let adminConditions = eq(schedules.dormId, user.dormId)
-    if (statusFilter) adminConditions = and(adminConditions, eq(swapLogs.status, statusFilter))
+    const adminConditions: SQL[] = [eq(schedules.dormId, user.dormId)]
+    if (statusFilter) adminConditions.push(eq(swapLogs.status, statusFilter))
 
     const swapList = await db.select()
       .from(swapLogs)
       .innerJoin(schedules, eq(swapLogs.scheduleIdA, schedules.id))
-      .where(adminConditions)
+      .where(and(...adminConditions))
       .orderBy(swapLogs.createdAt)
 
     return swapList.map(s => ({
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
 
   const swapList = await db.select()
     .from(swapLogs)
-    .where(conditions)
+    .where(and(...userConditions))
     .orderBy(swapLogs.createdAt)
 
   return swapList.map(s => ({

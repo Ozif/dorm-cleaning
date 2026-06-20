@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/dorm/tasks/delete
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { cleaningTasks } = await import('~/server/models/schema')
+  const { cleaningTasks } = await import('~~/server/models/schema')
 
   await db.delete(cleaningTasks)
     .where(and(eq(cleaningTasks.id, taskId), eq(cleaningTasks.dormId, dormId)))

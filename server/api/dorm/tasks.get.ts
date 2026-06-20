@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * GET /api/dorm/tasks
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const dormId = user.dormId
 
   const { db } = getDb()
-  const { cleaningTasks } = await import('~/server/models/schema')
+  const { cleaningTasks } = await import('~~/server/models/schema')
 
   const tasks = await db
     .select()

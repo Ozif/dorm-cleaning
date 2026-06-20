@@ -1,6 +1,7 @@
 import { eq, and, gte, lte, inArray } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
+import { formatDateOnly, parseDateOnly } from '~~/server/utils/date'
 
 /**
  * GET /api/schedule
@@ -17,19 +18,19 @@ export default defineEventHandler(async (event) => {
   // 默认本周
   const now = new Date()
   const dayOfWeek = now.getDay() || 7  // Sunday=0 -> 7, Monday=1..Saturday=6
-  const startDate = start || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1).toISOString().slice(0, 10)
-  const endDate = end || new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 7).toISOString().slice(0, 10)
+  const startDate = start || formatDateOnly(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1))
+  const endDate = end || formatDateOnly(new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 7))
 
   const { db } = getDb()
-  const { schedules, members } = await import('~/server/models/schema')
+  const { schedules, members } = await import('~~/server/models/schema')
 
   const scheduleList = await db.select()
     .from(schedules)
     .where(
       and(
         eq(schedules.dormId, dormId),
-        gte(schedules.scheduledDate, startDate),
-        lte(schedules.scheduledDate, endDate),
+        gte(schedules.scheduledDate, parseDateOnly(startDate)),
+        lte(schedules.scheduledDate, parseDateOnly(endDate)),
       )
     )
     .orderBy(schedules.scheduledDate)
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
     id: s.id,
     memberId: s.memberId,
     memberName: memberMap.get(s.memberId)?.name || '未知',
-    scheduledDate: s.scheduledDate,
+    scheduledDate: formatDateOnly(s.scheduledDate),
     weekNumber: s.weekNumber,
     status: s.status,
     completedAt: s.completedAt,

@@ -1,7 +1,8 @@
 import { eq, and, inArray } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
-import { schedulerService } from '~/server/services/scheduler'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
+import { schedulerService } from '~~/server/services/scheduler'
+import { parseDateOnly, formatDateOnly } from '~~/server/utils/date'
 
 /**
  * POST /api/schedule/generate
@@ -19,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, schedules, dormConfig } = await import('~/server/models/schema')
+  const { members, schedules, dormConfig } = await import('~~/server/models/schema')
 
   // 获取宿舍配置
   const configList = await db.select()
@@ -41,6 +42,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = configList[0]
+  if (!config) {
+    throw createError({ statusCode: 404, message: '宿舍未配置' })
+  }
 
   // 用排班算法生成
   const assignments = schedulerService.generateSchedule(memberList, startDate, days, config.frequencyCount, config.frequencyType)
@@ -50,18 +54,18 @@ export default defineEventHandler(async (event) => {
   }
 
   // 批量写入数据库
-  const dates = assignments.map(a => a.scheduledDate)
+  const dates = assignments.map(a => parseDateOnly(a.scheduledDate))
   const existingSchedules = await db.select({ scheduledDate: schedules.scheduledDate })
     .from(schedules)
     .where(and(eq(schedules.dormId, dormId), inArray(schedules.scheduledDate, dates)))
 
-  const existingDates = new Set(existingSchedules.map(s => s.scheduledDate))
+  const existingDates = new Set(existingSchedules.map(s => formatDateOnly(s.scheduledDate)))
   const newAssignments = assignments
     .filter(a => !existingDates.has(a.scheduledDate))
     .map(a => ({
       dormId,
       memberId: a.memberId,
-      scheduledDate: a.scheduledDate,
+      scheduledDate: parseDateOnly(a.scheduledDate),
       weekNumber: a.weekNumber,
       status: 'pending' as const,
     }))

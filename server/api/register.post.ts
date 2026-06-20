@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
+import { getDb } from '~~/server/utils/db'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const { db } = getDb()
 
-  const { dormConfig, registrationRequests } = await import('~/server/models/schema')
+  const { dormConfig, registrationRequests } = await import('~~/server/models/schema')
 
   // 检查宿舍名是否已存在
   const [existingDorm] = await db.select().from(dormConfig).where(eq(dormConfig.dormName, dorm_name)).limit(1)
@@ -50,7 +50,7 @@ export default defineEventHandler(async (event) => {
     expiresAt,
   })
 
-  const { emailService } = await import('~/server/utils/email')
+  const { emailService } = await import('~~/server/utils/email')
   const approveUrl = `${process.env.NUXT_PUBLIC_URL || 'http://localhost:3000'}/api/approve/${approveToken}`
   await emailService.sendNotification(
     process.env.SUPER_ADMIN_EMAIL || '',

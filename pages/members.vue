@@ -12,7 +12,7 @@
     <section class="card">
       <h3>成员列表</h3>
       <div v-if="members.length === 0" class="empty">暂无成员</div>
-      <div v-for="(m, i) in members" :key="m.id" class="member-card">
+      <div v-for="m in members" :key="m.id" class="member-card">
         <div class="member-info">
           <div class="member-name">{{ m.name }}</div>
           <div class="member-email">{{ m.email }}</div>
@@ -25,14 +25,14 @@
           <input v-model.number="m.weight" type="range" min="0.5" max="3.0" step="0.5" @change="updateWeight(m)" />
           <span class="weight-val">{{ m.weight }}</span>
         </div>
-        <button class="btn-sm danger" @click="showConfirm = true; pendingRemoveIndex = i">移除</button>
+        <button class="btn-sm danger" @click="openRemoveConfirm(m)">移除</button>
       </div>
     </section>
 
     <!-- Confirm dialog -->
     <div v-if="showConfirm" class="confirm-overlay" @click.self="showConfirm = false">
       <div class="confirm-dialog">
-        <p>确定要移除成员 {{ members[pendingRemoveIndex]?.name }} 吗？</p>
+        <p>确定要移除成员 {{ pendingRemoveName || '该成员' }} 吗？</p>
         <div class="confirm-actions">
           <button class="btn-sm" @click="showConfirm = false">取消</button>
           <button class="btn-sm danger" @click="confirmRemove">确定移除</button>
@@ -52,7 +52,8 @@ const newName = ref('')
 const newEmail = ref('')
 const members = ref<Array<{ id: number; name: string; email: string; weight: number; emailVerified: boolean }>>([])
 const showConfirm = ref(false)
-const pendingRemoveIndex = ref(0)
+const pendingRemoveMemberId = ref<number | null>(null)
+const pendingRemoveName = ref('')
 const toastMessage = ref('')
 const toastType = ref<'success' | 'error'>('success')
 
@@ -69,6 +70,12 @@ async function loadMembers() {
 
 onMounted(loadMembers)
 
+function openRemoveConfirm(member: { id: number; name: string }) {
+  pendingRemoveMemberId.value = member.id
+  pendingRemoveName.value = member.name
+  showConfirm.value = true
+}
+
 async function addMember() {
   if (!newName.value || !newEmail.value) return
   try {
@@ -84,12 +91,16 @@ async function addMember() {
 
 async function confirmRemove() {
   showConfirm.value = false
+  if (!pendingRemoveMemberId.value) return
   try {
-    await $fetch('/api/members', { method: 'DELETE', params: { memberId: members.value[pendingRemoveIndex.value].id } })
+    await $fetch('/api/members', { method: 'DELETE', params: { memberId: pendingRemoveMemberId.value } })
     await loadMembers()
     showToast('成员已移除 ✅', 'success')
   } catch {
     showToast('移除成员失败', 'error')
+  } finally {
+    pendingRemoveMemberId.value = null
+    pendingRemoveName.value = ''
   }
 }
 

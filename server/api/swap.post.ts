@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
-import { schedulerService } from '~/server/services/scheduler'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
+import { schedulerService } from '~~/server/services/scheduler'
 
 /**
  * POST /api/swap
@@ -19,11 +19,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { schedules, swapLogs } = await import('~/server/models/schema')
+  const { schedules, swapLogs } = await import('~~/server/models/schema')
 
-  // 获取两个排班记录
-  const [schedA] = await db.select().from(schedules).where(eq(schedules.id, scheduleIdA)).limit(1)
-  const [schedB] = await db.select().from(schedules).where(eq(schedules.id, scheduleIdB)).limit(1)
+  // 获取两个排班记录（同时校验宿舍隔离）
+  const [schedA] = await db.select().from(schedules).where(and(eq(schedules.id, scheduleIdA), eq(schedules.dormId, dormId))).limit(1)
+  const [schedB] = await db.select().from(schedules).where(and(eq(schedules.id, scheduleIdB), eq(schedules.dormId, dormId))).limit(1)
 
   if (!schedA || !schedB) {
     throw createError({ statusCode: 404, message: '排班记录不存在' })
@@ -37,6 +37,11 @@ export default defineEventHandler(async (event) => {
   // 验证排班记录与请求成员匹配
   if (schedA.memberId !== fromMemberA) {
     throw createError({ statusCode: 400, message: '排班记录与请求成员不匹配' })
+  }
+
+  // 验证接收方的排班记录与指定的接收人成员匹配 (Problem H)
+  if (schedB.memberId !== toMemberB) {
+    throw createError({ statusCode: 400, message: '接收方的排班记录与指定的接收人成员不匹配' })
   }
 
   // 验证请求方确实是被互换的成员之一

@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/admin/signoff
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { schedules, missedLogs } = await import('~/server/models/schema')
+  const { schedules, missedLogs } = await import('~~/server/models/schema')
 
   // 查找该排班
   const scheduleList = await db
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: '排班记录不存在' })
   }
 
-  const schedule = scheduleList[0]
+  const schedule = scheduleList[0]!
 
   await db.transaction(async (tx) => {
     // 更新排班状态为 done

@@ -11,7 +11,7 @@
         <span class="period-label">{{ periodLabel }}</span>
         <button @click="nextPeriod" class="nav-btn">▶</button>
       </div>
-      <button class="btn-generate" @click="showGenerate = true">生成排班</button>
+      <button v-if="canGenerate" class="btn-generate" @click="showGenerate = true">生成排班</button>
     </div>
 
     <!-- 周视图 -->
@@ -127,6 +127,8 @@
 
 <script setup lang="ts">
 const view = ref<'week' | 'month'>('week')
+const currentUser = useState<{ isAdmin: boolean } | null>('current-user', () => null)
+const canGenerate = computed(() => currentUser.value?.isAdmin === true)
 const showGenerate = ref(false)
 const generateStart = ref('')
 const generateDays = ref(7)
@@ -150,7 +152,7 @@ function showToast(msg: string, type: 'success' | 'error' = 'success') {
 }
 
 const members = ref<Array<{ id: number; name: string }>>([])
-const scheduleMap = ref<Record<number, Record<string, string>>>({})
+const scheduleMap = ref<Record<number, Record<string, { id: number; status: string }>>>({})
 const markingDone = ref(false)
 
 // 本周日期
@@ -174,6 +176,17 @@ const weekDays = computed(() => {
 
 const weekStartStr = computed(() => weekDays.value[0]?.full || '')
 const weekEndStr = computed(() => weekDays.value[6]?.full || '')
+const monthStartStr = computed(() => {
+  const year = weekStart.value.getFullYear()
+  const month = weekStart.value.getMonth()
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`
+})
+const monthEndStr = computed(() => {
+  const year = weekStart.value.getFullYear()
+  const month = weekStart.value.getMonth()
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+})
 
 const periodLabel = computed(() => {
   if (view.value === 'week') {
@@ -201,10 +214,10 @@ const monthDays = computed(() => {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`
     const scheds: Array<{ memberId: number; name: string; status: string }> = []
     for (const [memberIdStr, dates] of Object.entries(scheduleMap.value)) {
-      const status = dates[dateStr]
-      if (status) {
+      const statusObj = dates[dateStr]
+      if (statusObj) {
         const m = members.value.find(mm => mm.id === Number(memberIdStr))
-        scheds.push({ memberId: Number(memberIdStr), name: m?.name || '未知', status })
+        scheds.push({ memberId: Number(memberIdStr), name: m?.name || '未知', status: statusObj.status })
       }
     }
     days.push({ dayNum: i, currentMonth: true, schedules: scheds, date: dateStr })
@@ -213,24 +226,27 @@ const monthDays = computed(() => {
 })
 
 async function loadData() {
+  const params = view.value === 'month'
+    ? { start: monthStartStr.value, end: monthEndStr.value }
+    : { start: weekStartStr.value, end: weekEndStr.value }
   const [memberData, scheduleData] = await Promise.all([
     $fetch('/api/members'),
-    $fetch('/api/schedule', { params: { start: weekStartStr.value, end: weekEndStr.value } }),
+    $fetch('/api/schedule', { params }),
   ])
   members.value = memberData.map((m: any) => ({ id: m.id, name: m.name }))
-  const map: Record<number, Record<string, string>> = {}
-  for (const s of scheduleData as Array<{ memberId: number; scheduledDate: string; status: string }>) {
+  const map: Record<number, Record<string, { id: number; status: string }>> = {}
+  for (const s of scheduleData as Array<{ id: number; memberId: number; scheduledDate: string; status: string }>) {
     if (!map[s.memberId]) map[s.memberId] = {}
-    map[s.memberId][s.scheduledDate] = s.status
+    map[s.memberId][s.scheduledDate] = { id: s.id, status: s.status }
   }
   scheduleMap.value = map
 }
 
 onMounted(loadData)
-watch(weekStart, loadData)
+watch([weekStart, view], loadData)
 
 function getSchedule(memberId: number, date: string): string {
-  return scheduleMap.value[memberId]?.[date] || ''
+  return scheduleMap.value[memberId]?.[date]?.status || ''
 }
 
 function getCellClass(memberId: number, date: string): string {
@@ -262,13 +278,17 @@ async function markDone(day: {memberId: number; date: string}) {
   if (markingDone.value) return
   markingDone.value = true
   try {
-    const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
-    const sched = scheduleData.find(s => s.memberId === day.memberId)
-    if (sched) {
-      await $fetch('/api/schedule/complete', { method: 'POST', body: { scheduleId: sched.id } })
+    const schedId = scheduleMap.value[day.memberId]?.[day.date]?.id
+    if (schedId) {
+      await $fetch('/api/schedule/complete', { method: 'POST', body: { scheduleId: schedId } })
+      showToast('打卡完成 ✅', 'success')
       await loadData()
+    } else {
+      showToast('未找到对应的排班记录', 'error')
     }
     selectedDay.value = null
+  } catch (err: any) {
+    showToast(err.data?.message || '打卡失败，请重试', 'error')
   } finally {
     markingDone.value = false
   }
@@ -276,22 +296,32 @@ async function markDone(day: {memberId: number; date: string}) {
 
 watch(swapTargetMemberId, async (id) => {
   if (!id) { targetSchedules.value = []; return }
-  const data: Array<{id: number; memberId: number; scheduledDate: string; status: string}> = await $fetch('/api/schedule', { params: { start: weekStartStr.value, end: weekEndStr.value } })
-  targetSchedules.value = data.filter(s => s.memberId === id && s.status === 'pending')
+  try {
+    const data: Array<{id: number; memberId: number; scheduledDate: string; status: string}> = await $fetch('/api/schedule', { params: { start: weekStartStr.value, end: weekEndStr.value } })
+    targetSchedules.value = data.filter(s => s.memberId === id && s.status === 'pending')
+  } catch (err: any) {
+    showToast(err.data?.message || '加载对方排班失败', 'error')
+  }
 })
 
 async function initiateSwap(day: {memberId: number; date: string}) {
-  const scheduleData: Array<{ id: number; memberId: number; scheduledDate: string }> = await $fetch('/api/schedule', { params: { start: day.date, end: day.date } })
-  const sched = scheduleData.find(s => s.memberId === day.memberId)
-  if (!sched) return
-  swapFromScheduleId.value = sched.id
-  swapFromDate.value = day.date
-  swapFromMemberId.value = day.memberId
-  swapTargetMemberId.value = 0
-  swapTargetScheduleId.value = 0
-  targetSchedules.value = []
-  selectedDay.value = null
-  showSwapDialog.value = true
+  try {
+    const schedId = scheduleMap.value[day.memberId]?.[day.date]?.id
+    if (!schedId) {
+      showToast('未找到对应的排班记录', 'error')
+      return
+    }
+    swapFromScheduleId.value = schedId
+    swapFromDate.value = day.date
+    swapFromMemberId.value = day.memberId
+    swapTargetMemberId.value = 0
+    swapTargetScheduleId.value = 0
+    targetSchedules.value = []
+    selectedDay.value = null
+    showSwapDialog.value = true
+  } catch (err: any) {
+    showToast('发起互换失败，请重试', 'error')
+  }
 }
 
 async function confirmSwap() {

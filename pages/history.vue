@@ -13,7 +13,7 @@
     <div v-if="filteredRecords.length === 0" class="empty">
       <p>暂无记录</p>
     </div>
-    <div v-for="r in filteredRecords" :key="r.id" class="record-card">
+    <div v-for="r in paginatedRecords" :key="r.id" class="record-card">
       <div class="record-left">
         <div class="record-date">{{ r.date }}</div>
         <div class="record-member">{{ r.member }}</div>
@@ -24,6 +24,13 @@
         </span>
         <span v-if="r.status === 'done' && r.completedAt" class="time">{{ r.completedAt }}</span>
       </div>
+    </div>
+
+    <!-- 分页控制 -->
+    <div v-if="totalPages > 1" class="pagination">
+      <button :disabled="currentPage === 1" @click="currentPage--" class="page-btn">上一页</button>
+      <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+      <button :disabled="currentPage === totalPages" @click="currentPage++" class="page-btn">下一页</button>
     </div>
   </div>
 </template>
@@ -62,6 +69,21 @@ const filteredRecords = computed(() => {
   if (filter.value === 'all') return records.value
   return records.value.filter(r => r.status === filter.value)
 })
+
+// 分页
+const currentPage = ref(1)
+const pageSize = 10
+const totalPages = computed(() => Math.ceil(filteredRecords.value.length / pageSize) || 1)
+
+const paginatedRecords = computed(() => {
+  const start = (currentPage.value - 1) * pageSize
+  const end = start + pageSize
+  return filteredRecords.value.slice(start, end)
+})
+
+watch(filter, () => {
+  currentPage.value = 1
+})
 </script>
 
 <style scoped>
@@ -78,4 +100,10 @@ h2 { font-size: 20px; color: #333; margin: 0 0 16px; }
 .record-right { text-align: right; }
 .status { font-size: 13px; font-weight: 500; }
 .time { display: block; font-size: 11px; color: #999; margin-top: 2px; }
+
+/* 分页 */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
+.page-btn { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; color: #666; }
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-info { font-size: 14px; color: #666; font-weight: 500; }
 </style>

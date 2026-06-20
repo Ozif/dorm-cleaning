@@ -8,7 +8,7 @@
 - ⬜ 第五阶段：完善
 
 ## 已完成功能
-- ✅ 初始化 Nuxt 3 + TypeScript + pnpm 项目
+- ✅ 初始化 Nuxt 4 + TypeScript + pnpm 项目
 - ✅ 配置 MySQL + Drizzle ORM
 - ✅ 创建数据表定义（8张表）
 - ✅ 搭建基础布局

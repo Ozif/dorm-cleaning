@@ -9,10 +9,11 @@
  * - 23:00 → 第 3 次催办
  * - 00:00 → 标记未完成 + 通知管理员
  */
-import cron from 'node-cron'
+import cron, { type ScheduledTask } from 'node-cron'
 import { eq, and, gte, lte, inArray, isNull } from 'drizzle-orm'
-import { emailService } from '~/server/utils/email'
-import { getDb } from '~/server/utils/db'
+import { emailService } from '~~/server/utils/email'
+import { getDb } from '~~/server/utils/db'
+import { formatDateOnly, parseDateOnly } from '~~/server/utils/date'
 
 interface TaskInfo {
   name: string
@@ -22,7 +23,7 @@ interface TaskInfo {
 }
 
 export class CronService {
-  private tasks: Map<string, cron.ScheduledTask> = new Map()
+  private tasks: Map<string, ScheduledTask> = new Map()
   private running = false
   private taskMeta: Map<string, TaskInfo> = new Map()
 
@@ -72,7 +73,7 @@ export class CronService {
    */
   private async getDb() {
     const { db } = getDb()
-    const schema = await import('~/server/models/schema')
+    const schema = await import('~~/server/models/schema')
     return { db, schema }
   }
 
@@ -80,7 +81,7 @@ export class CronService {
    * 获取今天的日期字符串 YYYY-MM-DD
    */
   private getToday(): string {
-    return new Date().toISOString().slice(0, 10)
+    return formatDateOnly(new Date())
   }
 
   /**
@@ -103,7 +104,7 @@ export class CronService {
       .leftJoin(members, eq(schedules.memberId, members.id))
       .where(
         and(
-          eq(schedules.scheduledDate, today),
+          eq(schedules.scheduledDate, parseDateOnly(today)),
           eq(schedules.status, 'pending'),
         ),
       )
@@ -225,9 +226,9 @@ export class CronService {
   private async taskMarkMissed(): Promise<string> {
     try {
       const { db, schema } = await this.getDb()
-      const { schedules, missedLogs, members, dormConfig } = schema
+      const { schedules, missedLogs, members } = schema
       const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
-      const dateStr = yesterday.toISOString().slice(0, 10)
+      const dateStr = formatDateOnly(yesterday)
 
       // 查找昨天未完成的排班
       const pendingList = await db
@@ -243,7 +244,7 @@ export class CronService {
         .leftJoin(members, eq(schedules.memberId, members.id))
         .where(
           and(
-            eq(schedules.scheduledDate, dateStr),
+            eq(schedules.scheduledDate, parseDateOnly(dateStr)),
             eq(schedules.status, 'pending'),
           ),
         )
@@ -255,6 +256,7 @@ export class CronService {
       // 更新状态为 missed + 记录 missed_logs（原子操作）
       const pendingIds = pendingList.map((p: any) => p.scheduleId)
       let sentWarnings = 0
+      const warningQueue: Array<{ email: string; name: string; date: string; dormId: number; scheduleId: number; memberId: number }> = []
       await db.transaction(async (tx) => {
         await tx
           .update(schedules)
@@ -269,24 +271,38 @@ export class CronService {
             status: 'missed',
           })
 
-          // 发送漏扫警告
-          const ok = await emailService.sendMissedWarning(
-            p.memberEmail,
-            p.memberName,
-            p.scheduledDate,
-          )
-          await this.logEmail(tx, schema, {
-            dormId: p.dormId,
-            scheduleId: p.scheduleId,
-            memberId: p.memberId,
-            email: p.memberEmail,
-            emailType: 'missed_warning',
-            subject: `宿舍漏扫警告 - ${p.scheduledDate}`,
-            status: ok ? 'success' : 'failed',
-          })
-          if (ok) sentWarnings++
+          if (p.memberEmail) {
+            warningQueue.push({
+              email: p.memberEmail,
+              name: p.memberName || '同学',
+              date: formatDateOnly(p.scheduledDate),
+              dormId: p.dormId,
+              scheduleId: p.scheduleId,
+              memberId: p.memberId,
+            })
+          }
         }
       })
+
+      for (const warning of warningQueue) {
+        const ok = await emailService.sendMissedWarning(
+          warning.email,
+          warning.name,
+          warning.date,
+        )
+        await this.logEmail(db, schema, {
+          dormId: warning.dormId,
+          scheduleId: warning.scheduleId,
+          memberId: warning.memberId,
+          email: warning.email,
+          emailType: 'missed_warning',
+          subject: `宿舍漏扫警告 - ${warning.date}`,
+          status: ok ? 'success' : 'failed',
+        })
+        if (ok) {
+          sentWarnings++
+        }
+      }
 
       // 通知超级管理员
       const adminEmail = process.env.SUPER_ADMIN_EMAIL

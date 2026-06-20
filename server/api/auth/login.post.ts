@@ -1,5 +1,5 @@
-import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
+import { eq, and, gte, sql } from 'drizzle-orm'
+import { getDb } from '~~/server/utils/db'
 
 /**
  * POST /api/auth/login
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, dormConfig } = await import('~/server/models/schema')
+  const { members, dormConfig, emailLogs } = await import('~~/server/models/schema')
 
   // 查找成员
   const memberList = await db.select()
@@ -27,11 +27,24 @@ export default defineEventHandler(async (event) => {
     .where(eq(members.email, email))
     .limit(1)
 
-  if (memberList.length === 0) {
+  const member = memberList[0]
+  if (!member) {
     throw createError({ statusCode: 404, message: '该邮箱未注册' })
   }
 
-  const member = memberList[0]
+  const recentFailures = await db.select({ count: sql<number>`count(*)` })
+    .from(emailLogs)
+    .where(
+      and(
+        eq(emailLogs.email, email),
+        eq(emailLogs.emailType, 'login_failed'),
+        gte(emailLogs.sentAt, new Date(Date.now() - 10 * 60 * 1000)),
+      ),
+    )
+
+  if (Number(recentFailures[0]?.count || 0) >= 5) {
+    throw createError({ statusCode: 429, message: '登录失败次数过多，请 10 分钟后再试' })
+  }
 
   // 查询宿舍配置，判断是否为管理员
   const configList = await db.select()
@@ -39,10 +52,19 @@ export default defineEventHandler(async (event) => {
     .where(eq(dormConfig.id, member.dormId))
     .limit(1)
 
-  const isAdmin = configList.length > 0 && configList[0].adminMemberId === member.id
+  const isAdmin = configList[0]?.adminMemberId === member.id
 
   // 验证验证码
   if (member.loginCode !== code) {
+    await db.insert(emailLogs).values({
+      dormId: member.dormId,
+      memberId: member.id,
+      email,
+      emailType: 'login_failed',
+      subject: '登录验证码校验失败',
+      sentAt: new Date(),
+      status: 'failed',
+    })
     throw createError({ statusCode: 401, message: '验证码错误' })
   }
 
@@ -59,17 +81,16 @@ export default defineEventHandler(async (event) => {
     .where(eq(members.id, member.id))
 
   // 设置 session（使用 Nuxt 内置的 seal/data 机制，或简单存 cookie）
+  const now = Date.now()
   const sessionData = {
     memberId: member.id,
     dormId: member.dormId,
     email: member.email,
     name: member.name,
-    isAdmin,
-    loginAt: Date.now(),
+    iat: now,
+    exp: now + 7 * 24 * 60 * 60 * 1000,
   }
 
-  // 使用 Nuxt 的 setCookie + seal 确保安全
-  const config = useRuntimeConfig()
   const sessionToken = await sealSession(sessionData)
 
   setCookie(event, 'dorm_session', sessionToken, {
@@ -82,7 +103,10 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    session: sessionData,
+    session: {
+      ...sessionData,
+      isAdmin,
+    },
   }
 })
 
@@ -90,7 +114,14 @@ export default defineEventHandler(async (event) => {
  * 使用简单加密方式保护 session 数据
  * 生产环境建议使用 nuxt-auth-utils 或 iron-session
  */
-async function sealSession(data: Record<string, any>): Promise<string> {
+async function sealSession(data: {
+  memberId: number
+  dormId: number
+  email: string
+  name: string
+  iat: number
+  exp: number
+}): Promise<string> {
   const { seal } = await import('~~/server/utils/crypto')
   return seal(data)
 }

@@ -1,7 +1,8 @@
 import { eq, and, gt, or } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
-import { schedulerService } from '~/server/services/scheduler'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
+import { schedulerService } from '~~/server/services/scheduler'
+import { parseDateOnly, formatDateOnly } from '~~/server/utils/date'
 
 /**
  * PUT /api/members
@@ -24,7 +25,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, schedules, dormConfig } = await import('~/server/models/schema')
+  const { members, schedules, dormConfig } = await import('~~/server/models/schema')
 
   // 更新成员权重
   await db.update(members)
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event) => {
 
   // 重新生成排班：删除未来排班后重新生成
   const today = new Date()
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = formatDateOnly(today)
 
   // 获取宿舍配置
   const [config] = await db.select()
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
 
     if (memberList.length > 0) {
       // 清理该成员相关的换班请求
-      const { swapLogs } = await import('~/server/models/schema')
+      const { swapLogs } = await import('~~/server/models/schema')
       await db.delete(swapLogs).where(
         or(
           eq(swapLogs.fromMemberA, memberId),
@@ -61,7 +62,7 @@ export default defineEventHandler(async (event) => {
       await db.delete(schedules).where(
         and(
           eq(schedules.dormId, dormId),
-          gt(schedules.scheduledDate, todayStr),
+          gt(schedules.scheduledDate, parseDateOnly(todayStr)),
         ),
       )
 
@@ -78,7 +79,7 @@ export default defineEventHandler(async (event) => {
         const newSchedules = assignments.map(a => ({
           dormId,
           memberId: a.memberId,
-          scheduledDate: a.scheduledDate,
+          scheduledDate: parseDateOnly(a.scheduledDate),
           weekNumber: a.weekNumber,
           status: 'pending' as const,
         }))

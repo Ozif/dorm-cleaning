@@ -3,15 +3,23 @@ import dotenv from 'dotenv'
 
 dotenv.config()
 
+function requiredEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`缺少环境变量 ${name}`)
+  }
+  return value
+}
+
 export default defineConfig({
   out: './server/models/migrations',
   schema: './server/models/schema.ts',
   dialect: 'mysql',
   dbCredentials: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306'),
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'dorm_cleaning',
+    host: requiredEnv('DB_HOST'),
+    port: parseInt(requiredEnv('DB_PORT')),
+    user: requiredEnv('DB_USER'),
+    password: requiredEnv('DB_PASSWORD'),
+    database: requiredEnv('DB_NAME'),
   },
 })

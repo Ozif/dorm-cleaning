@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/members
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members } = await import('~/server/models/schema')
+  const { members } = await import('~~/server/models/schema')
 
   // 检查邮箱是否已存在
   const existing = await db.select()

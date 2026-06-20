@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * GET /api/members
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const dormId = user.dormId
 
   const { db } = getDb()
-  const { members } = await import('~/server/models/schema')
+  const { members } = await import('~~/server/models/schema')
 
   const memberList = await db.select()
     .from(members)

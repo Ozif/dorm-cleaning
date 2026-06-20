@@ -30,7 +30,7 @@
       <div v-if="swapHistory.length === 0" class="empty">
         <p>暂无互换记录</p>
       </div>
-      <div v-for="swap in swapHistory" :key="swap.id" class="swap-card history">
+      <div v-for="swap in paginatedSwapHistory" :key="swap.id" class="swap-card history">
         <div class="swap-info">
           <p class="swap-from">{{ swap.fromName }} ↔ {{ swap.toName }}</p>
           <p class="swap-dates">{{ swap.dateA }} ↔ {{ swap.dateB }}</p>
@@ -38,6 +38,13 @@
         <span class="status-badge" :class="swap.status">
           {{ swap.status === 'approved' ? '✅ 已批准' : '❌ 已拒绝' }}
         </span>
+      </div>
+
+      <!-- 分页控制 -->
+      <div v-if="totalHistoryPages > 1" class="pagination">
+        <button :disabled="currentHistoryPage === 1" @click="currentHistoryPage--" class="page-btn">上一页</button>
+        <span class="page-info">{{ currentHistoryPage }} / {{ totalHistoryPages }}</span>
+        <button :disabled="currentHistoryPage === totalHistoryPages" @click="currentHistoryPage++" class="page-btn">下一页</button>
       </div>
     </div>
 
@@ -71,6 +78,21 @@ interface SwapItem {
 
 const pendingSwaps = ref<SwapItem[]>([])
 const swapHistory = ref<SwapItem[]>([])
+
+// 历史记录分页
+const currentHistoryPage = ref(1)
+const historyPageSize = 10
+const totalHistoryPages = computed(() => Math.ceil(swapHistory.value.length / historyPageSize) || 1)
+
+const paginatedSwapHistory = computed(() => {
+  const start = (currentHistoryPage.value - 1) * historyPageSize
+  const end = start + historyPageSize
+  return swapHistory.value.slice(start, end)
+})
+
+watch(tab, () => {
+  currentHistoryPage.value = 1
+})
 
 onMounted(async () => {
   const now = new Date()
@@ -178,4 +200,10 @@ async function rejectSwap(id: number) {
 }
 .toast.success { background: #16a34a; color: #fff; }
 .toast.error { background: #ef4444; color: #fff; }
+
+/* 分页 */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
+.page-btn { padding: 6px 12px; border: 1px solid #ddd; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; color: #666; }
+.page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.page-info { font-size: 14px; color: #666; font-weight: 500; }
 </style>

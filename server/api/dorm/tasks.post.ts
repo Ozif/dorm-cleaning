@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/dorm/tasks
@@ -18,12 +18,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { cleaningTasks } = await import('~/server/models/schema')
+  const { cleaningTasks } = await import('~~/server/models/schema')
 
   const [result] = await db.select({ maxSort: sql<number>`MAX(${cleaningTasks.sortOrder})` })
     .from(cleaningTasks)
     .where(eq(cleaningTasks.dormId, dormId))
-  const maxSort = result.maxSort || 0
+  const maxSort = result?.maxSort || 0
 
   await db.insert(cleaningTasks).values({
     dormId,

@@ -1,5 +1,5 @@
 import { eq, and, gte, sql } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
+import { getDb } from '~~/server/utils/db'
 
 /**
  * POST /api/auth/send-code
@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, emailLogs } = await import('~/server/models/schema')
+  const { members, emailLogs } = await import('~~/server/models/schema')
 
   // 查找该邮箱对应的宿舍管理员
   const memberList = await db.select()
@@ -23,11 +23,10 @@ export default defineEventHandler(async (event) => {
     .where(eq(members.email, email))
     .limit(1)
 
-  if (memberList.length === 0) {
+  const member = memberList[0]
+  if (!member) {
     throw createError({ statusCode: 404, message: '该邮箱未注册为宿舍管理员' })
   }
-
-  const member = memberList[0]
 
   // 频率限制检查：60秒内
   const recentLogs = await db.select()
@@ -73,7 +72,7 @@ export default defineEventHandler(async (event) => {
     .where(eq(members.id, member.id))
 
   // 先发送验证码邮件
-  const { emailService } = await import('~/server/utils/email')
+  const { emailService } = await import('~~/server/utils/email')
   await emailService.sendVerifyCode(email, code)
 
   // 发送成功后记录日志

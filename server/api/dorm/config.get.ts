@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * GET /api/dorm/config
@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const dormId = user.dormId
 
   const { db } = getDb()
-  const { dormConfig, cleaningTasks } = await import('~/server/models/schema')
+  const { dormConfig, cleaningTasks } = await import('~~/server/models/schema')
 
   // 查询宿舍配置
   const configList = await db.select()

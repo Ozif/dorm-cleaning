@@ -1,5 +1,5 @@
-import { cronService } from '~/server/services/cron'
-import { requireAuth } from '~/server/utils/auth'
+import { cronService } from '~~/server/services/cron'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/cron/start

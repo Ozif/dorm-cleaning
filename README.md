@@ -69,11 +69,15 @@ SMTP_PASS=your_smtp_authorization_code
 # 超级管理员邮箱（审批宿舍注册用）
 SUPER_ADMIN_EMAIL=admin@example.com
 
-# Session 加密密钥（随便写个长字符串）
+# Session 签名密钥（至少 32 位随机字符串）
 NUXT_SESSION_PASSWORD=your_random_secret_key_here
 
-# 应用端口
+# 应用地址与端口
 NUXT_PORT=3000
+NUXT_PUBLIC_URL=http://localhost:3000
+
+# 是否在服务启动时自动启用定时任务
+CRON_AUTO_START=false
 ```
 
 > 💡 QQ 邮箱的 SMTP 授权码在设置 → 账户 → POP3/IMAP/SMTP 服务中开启并生成
@@ -89,7 +93,7 @@ CREATE DATABASE dorm_cleaning CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ### 4. 推送数据表
 
 ```bash
-pnpm drizzle-kit push
+pnpm db:push
 ```
 
 ### 5. 启动开发服务器
@@ -132,10 +136,11 @@ dorm-cleaning/
 │   │   └── cron.ts                # Nitro 启动插件
 │   ├── api/                       # 📡 后端 API（Nuxt Server Routes）
 │   │   ├── register.post.ts       # 注册申请
-│   │   ├── approve/[token].get.ts # 审批入口
+│   │   ├── approve/[token].ts     # 审批确认页 + 提交审批
 │   │   ├── auth/
 │   │   │   ├── send-code.post.ts  # 发送验证码
-│   │   │   └── login.post.ts      # 验证码登录
+│   │   │   ├── login.post.ts      # 验证码登录
+│   │   │   └── me.get.ts          # 当前登录用户
 │   │   ├── dorm/
 │   │   │   ├── config.get.ts      # 获取宿舍配置
 │   │   │   ├── config.put.ts      # 更新宿舍配置
@@ -148,8 +153,7 @@ dorm-cleaning/
 │   │   ├── schedule.get.ts        # 获取排班
 │   │   ├── schedule/generate.post.ts  # 生成排班
 │   │   ├── schedule/complete.post.ts  # 打卡完成
-│   │   ├── schedule/missed.get.ts     # 获取漏扫列表（⚠️ 注意：这是个多余的错误路由示例）
-│   │   ├── schedule/index.get.ts      # ⚠️ 错误路由示例（应为 /api/schedule）
+│   │   ├── schedule/missed.get.ts     # 获取漏扫列表
 │   │   ├── swap.get.ts            # 互换列表
 │   │   ├── swap.post.ts           # 发起互换
 │   │   ├── swap.put.ts            # 审批互换
@@ -162,10 +166,11 @@ dorm-cleaning/
 │   │       └── signoff.post.ts    # 管理员签销
 │   └── utils/
 │       ├── auth.ts                # 认证工具（requireAuth）
-│       ├── crypto.ts              # 加密工具（AES-256-CBC）
+│       ├── crypto.ts              # Session 签名工具
+│       ├── date.ts                # 日期格式工具
 │       ├── email.ts               # 邮件服务
 │       ├── cron.ts                # Cron 导出桥接
-│       └── rateLimit.ts           # 限流器
+│       └── db.ts                  # 数据库连接
 ├── nuxt.config.ts                 # Nuxt 配置文件
 ├── drizzle.config.ts              # Drizzle ORM 配置
 ├── .env.example                   # 环境变量模板
@@ -182,9 +187,11 @@ dorm-cleaning/
 | 路径 | 方法 | 说明 | 频率限制 |
 |------|:----:|------|:--------:|
 | `/api/register` | POST | 提交宿舍注册申请 | - |
-| `/api/approve/[token]` | GET | 超级管理员审批（点击邮件链接） | - |
+| `/api/approve/[token]` | GET | 查看审批确认页 | - |
+| `/api/approve/[token]` | POST | 确认审批并开通宿舍 | - |
 | `/api/auth/send-code` | POST | 发送邮箱验证码 | 60s/1次, 5次/小时 |
 | `/api/auth/login` | POST | 验证码登录 | - |
+| `/api/auth/me` | GET | 获取当前登录用户 | - |
 
 ### 宿舍配置
 | 路径 | 方法 | 说明 |

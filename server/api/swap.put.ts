@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
-import { emailService } from '~/server/utils/email'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
+import { emailService } from '~~/server/utils/email'
+import { formatDateOnly } from '~~/server/utils/date'
 
 /**
  * PUT /api/swap
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { swapLogs, schedules } = await import('~/server/models/schema')
+  const { swapLogs, schedules } = await import('~~/server/models/schema')
 
   // 获取互换请求
   const [swapLog] = await db.select().from(swapLogs).where(eq(swapLogs.id, swapId)).limit(1)
@@ -50,7 +51,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 收集邮件所需信息（事务外查询，避免事务内发邮件）
-  const { members } = await import('~/server/models/schema')
+  const { members } = await import('~~/server/models/schema')
   const [memberA] = await db.select().from(members).where(eq(members.id, swapLog.fromMemberA)).limit(1)
   const [memberB] = await db.select().from(members).where(eq(members.id, swapLog.toMemberB)).limit(1)
 
@@ -94,8 +95,8 @@ export default defineEventHandler(async (event) => {
       })
       .where(eq(swapLogs.id, swapId))
 
-    schedDateA = schedA.scheduledDate
-    schedDateB = schedB.scheduledDate
+    schedDateA = formatDateOnly(schedA.scheduledDate)
+    schedDateB = formatDateOnly(schedB.scheduledDate)
   })
 
   // 事务完成后发送邮件通知

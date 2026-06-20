@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * PUT /api/dorm/config
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { dormConfig } = await import('~/server/models/schema')
+  const { dormConfig } = await import('~~/server/models/schema')
 
   await db.update(dormConfig)
     .set({ frequencyType, frequencyCount, updatedAt: new Date() })

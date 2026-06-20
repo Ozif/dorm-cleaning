@@ -3,14 +3,22 @@ import { drizzle } from 'drizzle-orm/mysql2'
 
 let pool: mysql.Pool | null = null
 
+function requiredEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(`缺少环境变量 ${name}`)
+  }
+  return value
+}
+
 function getPool(): mysql.Pool {
   if (!pool) {
     pool = mysql.createPool({
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'dorm_cleaning',
+      host: requiredEnv('DB_HOST'),
+      port: parseInt(requiredEnv('DB_PORT')),
+      user: requiredEnv('DB_USER'),
+      password: requiredEnv('DB_PASSWORD'),
+      database: requiredEnv('DB_NAME'),
       waitForConnections: true,
       connectionLimit: 10,
     })

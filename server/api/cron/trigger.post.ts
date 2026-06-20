@@ -1,4 +1,4 @@
-import { requireAuth } from '~/server/utils/auth'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * POST /api/cron/trigger
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: '请提供 taskId' })
   }
 
-  const { cronService } = await import('~/server/services/cron')
+  const { cronService } = await import('~~/server/services/cron')
   const result = await cronService.triggerTask(taskId)
 
   return { success: true, taskId, result }

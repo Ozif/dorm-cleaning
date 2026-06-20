@@ -3,7 +3,7 @@
 ## [1.0.0] - 2026-06-18
 
 ### 新增
-- 初始化 Nuxt 3 + TypeScript + pnpm 项目
+- 初始化 Nuxt 4 + TypeScript + pnpm 项目
 - 配置 Drizzle ORM 与 MySQL 连接
 - 创建数据表定义（8张表）
 - 配置 drizzle.config.ts 数据库迁移

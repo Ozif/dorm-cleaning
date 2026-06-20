@@ -102,8 +102,7 @@ async function signoff(item: MissedItem) {
       body: { scheduleId: item.scheduleId },
     })
     showMsg(res.message || '签收成功', 'success')
-    // 更新本地状态
-    item.status = 'cleared'
+    await fetchMissed()
   } catch (err: any) {
     showMsg('签收失败: ' + (err.message || '未知错误'), 'error')
   } finally {

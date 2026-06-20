@@ -1,6 +1,6 @@
 import { eq, and, or } from 'drizzle-orm'
-import { getDb } from '~/server/utils/db'
-import { requireAuth } from '~/server/utils/auth'
+import { getDb } from '~~/server/utils/db'
+import { requireAuth } from '~~/server/utils/auth'
 
 /**
  * DELETE /api/members
@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { db } = getDb()
-  const { members, schedules, missedLogs, swapLogs, emailLogs } = await import('~/server/models/schema')
+  const { members, schedules, missedLogs, swapLogs, emailLogs } = await import('~~/server/models/schema')
 
   // 验证成员属于该宿舍
   const [member] = await db.select().from(members).where(eq(members.id, memberId)).limit(1)
